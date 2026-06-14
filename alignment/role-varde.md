@@ -2,6 +2,10 @@
 
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. This card is your lane within it.
 > Repo: *(TBD — not yet built / not yet feeding the tax pipeline)*.
+>
+> **No local override.** If this session needs different ledger, Event, P&L,
+> fee, funding, transfer, settlement, or book semantics, do not redefine them
+> locally — propose an additive change back to the Tax Adapter alignment folder.
 
 ## Status
 **Another bot, not yet built out and not yet feeding the Taxes pipeline.** This
@@ -40,7 +44,7 @@ Until these are answered, VARDE is **not wired** and the adapter does not read
 it.
 
 ## SovereignForge takeaways tagged to you
-Inherit the ecosystem invariants (§5) and, once trading is systematic, **A3
+Inherit the ecosystem invariants (§7) and, once trading is systematic, **A3
 classification-defense** — keep activity dated and auditable from the first
 fill, because that evidence is impossible to reconstruct after the fact.
 

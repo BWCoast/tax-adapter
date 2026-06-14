@@ -3,6 +3,10 @@
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. Copy this card to
 > `role-<name>.md` when a new producer becomes a first-class ecosystem project.
 > Repo: *(fill in)*.
+>
+> **No local override.** If this session needs different ledger, Event, P&L,
+> fee, funding, transfer, settlement, or book semantics, do not redefine them
+> locally — propose an additive change back to the Tax Adapter alignment folder.
 
 ## Your lane
 *What happened (you produce it).* You are a producer of financial activity —
@@ -38,7 +42,7 @@ the money*.
   structurally-identical sim/paper/live rows; export-freshness stamp
   (`run_id`/`git_commit`/generated-time).
 
-## Inherited invariants (non-negotiable — see ECOSYSTEM §5)
+## Inherited invariants (non-negotiable — see ECOSYSTEM §7)
 Decimal-only · never fabricate (UNRESOLVED) · ambiguity → `REQUIRES_REVIEW` ·
 provenance preserved · deterministic + idempotent · append-only/auditable ·
 counted skips (`sum(reasons) == n_dropped`).

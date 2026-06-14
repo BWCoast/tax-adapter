@@ -1,6 +1,11 @@
 # ROLE — Tax Adapter (this repo, the hub)
 
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. This card is your lane within it.
+>
+> **No local override.** You own the mapping only. Do not embed tax, strategy,
+> or allocation semantics locally; for any Event or ledger contract change,
+> propose an additive change back to the owning session (Taxes / Trading) via
+> this alignment folder.
 
 ## Your lane
 *What happened.* You are the translation layer. You read canonical producer

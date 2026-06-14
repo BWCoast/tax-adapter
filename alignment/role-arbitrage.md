@@ -2,6 +2,10 @@
 
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. This card is your lane within it.
 > Repo: *(TBD — not yet built / not yet feeding the pipeline)*.
+>
+> **No local override.** If this session needs different ledger, Event, P&L,
+> fee, funding, transfer, settlement, or book semantics, do not redefine them
+> locally — propose an additive change back to the Tax Adapter alignment folder.
 
 ## Status
 **Active ecosystem project, not yet wired.** This card exists so Arbitrage is

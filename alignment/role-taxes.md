@@ -1,6 +1,11 @@
 # ROLE — Taxes (tax core / authority of record)
 
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. This card is your lane within it.
+>
+> **No local override.** You own the Event contract — ratify changes to it in
+> your own ADRs. For producer/ledger/adapter semantics you need changed, do not
+> redefine them locally; request an additive change via the Tax Adapter
+> alignment folder.
 
 ## Your lane
 *What it meant.* You are the tax authority of record. You own the canonical

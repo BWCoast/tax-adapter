@@ -2,6 +2,11 @@
 
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. This card is your lane within it.
 > Repo: `Documents/PM algo`.
+>
+> **No local override.** If this session needs different ledger, Event, P&L,
+> fee, funding, transfer, settlement, resolution, or book semantics, do not
+> redefine them locally — propose an additive change back to the Tax Adapter
+> alignment folder.
 
 ## Your lane
 *What happened (you produce it).* You are the Kalshi prediction-market bot.

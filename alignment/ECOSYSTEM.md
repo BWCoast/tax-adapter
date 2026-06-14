@@ -6,8 +6,8 @@
 > before doing tax/trading/reporting work in *any* repo. It does not replace a
 > repo's own ADRs/LAWS/SCHEMAS — it tells you how the repos fit together, who
 > owns what, and the invariants none of them may break. Where this doc and an
-> owning repo's contract disagree, **the owning repo wins** and this doc is
-> stale — fix it.
+> owning repo's contract disagree, **the owning repo wins** (see §3 precedence)
+> and this doc is stale — fix it.
 
 ---
 
@@ -26,7 +26,26 @@ brain** that keeps them aligned. One canonical brain prevents session drift.
 Memorize this. Almost every "which session owns this?" question resolves by
 asking which of the three clauses the work belongs to.
 
-## 3. Topology — producers → adapter → tax core → consumers
+## 3. Binding priority (precedence)
+
+When two sources seem to conflict, resolve in this order (highest wins):
+
+1. **The owning repo's contract for its own domain** — the authoritative source
+   for anything that repo owns. Specifically, the **Taxes Event contract**
+   (ADR-0001) for tax requirements / Event semantics, and each producer's own
+   ledger/export contract for its fields.
+2. **`ECOSYSTEM.md`** (this file) for the *ecosystem boundary* — topology,
+   ownership lanes, cross-session invariants, coordination protocol.
+3. **Accepted ADRs** (any repo) for decisions of record within their scope.
+4. **Role cards** (`role-*.md`) for per-session behaviour.
+5. **README paste-prompts** for session bootstrapping.
+
+Read it as: *owning-repo contract* beats *this doc* on the contract's own
+content; *this doc* beats role cards and prompts on how the pieces fit. If you
+find a real conflict, don't paper over it — fix the lower-priority doc and note
+it. A stale alignment doc is a bug, not an authority.
+
+## 4. Topology — producers → adapter → tax core → consumers
 
 ```
   MM Strategy Bot / Trading lab (trade_ledger) ─┐
@@ -44,15 +63,15 @@ asking which of the three clauses the work belongs to.
 | **Tax Adapter** | `Documents/Tax adapter` | Translation layer. Owns source→Event **mapping** only. The hub that holds this alignment folder. |
 | **MM Strategy Bot / Trading lab** | `Documents/Trading` | Producer. Owns `trade_ledger`, intent, order contracts, the two-book model. |
 | **Prediction-Market algo (Kalshi)** | `Documents/PM algo` | Producer. Standalone bot; conforms to the adapter's export contract. |
-| **Arbitrage Bot** | *(TBD)* | Producer. Not yet built / not yet feeding the pipeline. |
-| **VARDE** | *(TBD)* | Producer (another bot). Not yet built / not yet feeding the pipeline. |
-| **Capital router / dashboards / pnl-service** | *(future)* | Consumers. Downstream of realized PnL and tax Events. |
+| **Arbitrage Bot** | *repo path TBD* | **First-class planned producer** — not yet built / not yet feeding the pipeline. First-class in the topology now (not a generic future system). |
+| **VARDE** | *repo path TBD* | **First-class planned producer** (another bot) — not yet built / not yet feeding the pipeline. First-class now, specifics OPEN. |
+| **Capital router / dashboards / pnl-service** | *future* | Consumers. Downstream of realized PnL and tax Events. |
 
 `SovereignForgeV1` (`Documents/SovereignForgeV1`) is **platform context only** —
-a live-trading Belgian sibling we mine for patterns/failure modes (see §7). Its
+a live-trading Belgian sibling we mine for patterns/failure modes (see §9). Its
 tax *specifics* do not transfer; it is not a contract dependency.
 
-## 4. Ownership & direction of authority
+## 5. Ownership & direction of authority
 
 The hard rule that makes the pipeline composable:
 
@@ -74,7 +93,27 @@ The hard rule that makes the pipeline composable:
 If a task seems to need you to cross one of these lines — stop. It belongs in
 another session.
 
-## 5. Shared invariants (non-negotiable, every session inherits these)
+## 6. Anti-patterns — explicitly banned
+
+These are the specific ways the pipeline rots. None are allowed in any session:
+
+- **"Conversation architecture."** Treating a decision settled in a chat as if
+  it were a contract. If it isn't written into the owning repo's ADR/LAWS/
+  SCHEMAS (or marked OPEN here with an owner), it does not bind. Chats propose;
+  documents decide.
+- **Producer-owned tax semantics.** A bot deciding what a fill *means for tax*
+  (gain/loss, income vs capital, characterization). Producers emit facts; Taxes
+  rules. `event_type` is normalization, not a tax ruling.
+- **Adapter-owned tax math.** The adapter computing FIFO/S104, valuation,
+  gain/loss, or any characterization. The adapter says *what happened* and stops.
+- **Capital-router / allocation logic leaking backward into Event mapping.**
+  Tax-reserve, accrual routing, sizing, or "what to do with the money" must
+  never influence how a fill becomes an Event. Allocation is a downstream
+  *decision*; translation is not a decision.
+- **Reporting / P&L attribution in the adapter or a producer.** Interpretation
+  lives in the pnl-service / dashboards, not in the producers or the bridge.
+
+## 7. Shared invariants (non-negotiable, every session inherits these)
 
 These hold everywhere money or quantities move. They are not adapter-only.
 
@@ -108,28 +147,68 @@ These are the four that are easiest to get wrong (Adapter `GOTCHAS.md`,
 - **`event_type` is a normalization, not a final tax ruling.** The adapter says
   what happened; the Taxes core decides what it meant.
 
-## 6. Coordination protocol
+## 8. Coordination protocol
 
 1. **Read first.** Before defining anything, check whether an ADR, `LAWS.md`,
    `SCHEMAS.md`, `SOURCES.md`, `HANDOFF.md`, or an existing repo doc already
    settles it. Reference it by path/name. Do not invent a new schema that
    already exists.
 2. **Mark OPEN, assign an owner.** If a contract is genuinely unsettled, write
-   it as `OPEN` and name the owning session — don't silently fill the gap.
+   it as `OPEN` in the structured form below — never silently fill the gap.
 3. **Propose additive changes back to the owner.** Changes to the Event
    contract → Taxes session. Changes to `trade_ledger` → Trading session. The
    adapter records the request in *its* docs and the owner ratifies in *theirs*.
 
+### OPEN item format
+
+Every OPEN item carries four fields so it cannot be quietly ignored:
+
+```
+OPEN: <short title>
+  owner:           <session(s) that must decide / ratify>
+  blocking_for:    <what cannot proceed until this is settled>
+  decision_needed: <the specific question to answer>
+  target_doc:      <where the ratified decision will live>
+```
+
 ### Open cross-session items (carried from `HANDOFF.md` / `PROGRESS.md`)
 
-- **[Taxes]** reserve the adapter's `ledger:` / `pm-algo:` `event_id` prefixes
-  (ADR-0001 addendum).
-- **[Trading]** agree the `trade_ledger → adapter` **transport** (file drop /
-  shared read-only export). Schema is settled; only transport is OPEN.
-- **[PM algo]** define + conform to the prediction-market export contract
-  (`SCHEMAS.md` §3.4 minimum set).
+```
+OPEN: event_id prefixes for adapter-produced events
+  owner:           Taxes (ratify) + Tax Adapter (propose)
+  blocking_for:    deterministic event_id scheme; adapter implementation
+  decision_needed: reserve the `ledger:` and `pm-algo:` event_id prefixes
+  target_doc:      Taxes ADR-0001 addendum
 
-## 7. SovereignForge takeaways (owner-tagged)
+OPEN: trade_ledger → adapter transport
+  owner:           Trading (decide with Tax Adapter)
+  blocking_for:    adapter reading live canonical rows
+  decision_needed: how canonical rows are handed over (file drop vs shared
+                   read-only export). Schema is settled; only transport is open.
+  target_doc:      Trading ADR (transport) + adapter SOURCES.md
+
+OPEN: prediction-market export contract
+  owner:           PM algo (conform) + Tax Adapter (define shape)
+  blocking_for:    building the PM-algo export adapter
+  decision_needed: ratify the §3.4 minimum set (fills, fees, realized PnL /
+                   payouts, deposits/withdrawals, year-end positions)
+  target_doc:      adapter SCHEMAS.md §3.4
+
+OPEN: Arbitrage Bot wiring
+  owner:           Arbitrage Bot (when built) + Tax Adapter
+  blocking_for:    Arbitrage feeding the pipeline
+  decision_needed: shared trade_ledger vs standalone export; instrument types
+                   that stress the load-bearing rules; repo path
+  target_doc:      alignment/role-arbitrage.md + adapter SCHEMAS.md
+
+OPEN: VARDE definition & wiring
+  owner:           VARDE (when built) + Tax Adapter
+  blocking_for:    VARDE feeding the pipeline
+  decision_needed: VARDE's distinct purpose; shared ledger vs standalone export
+  target_doc:      alignment/role-varde.md
+```
+
+## 9. SovereignForge takeaways (owner-tagged)
 
 From a read-only review of the live-trading Belgian sibling. Full detail +
 golden-fixture requirements in [`TAKEAWAY-SOVEREIGNFORGE.md`](../TAKEAWAY-SOVEREIGNFORGE.md).
@@ -151,7 +230,7 @@ Two meta-lessons that apply to **every** session:
 - **One canonical project brain prevents session drift.** This folder is that
   brain. Keep it current; read it before you assume.
 
-## 8. Read order
+## 10. Read order
 
 1. This file (`ECOSYSTEM.md`).
 2. Your role card: `role-<your-role>.md`.

@@ -26,9 +26,21 @@ folder **read-only**.
 1. At the **start of each session**, paste that session's prompt below.
 2. The session reads `ECOSYSTEM.md` + its role card, then proceeds.
 3. If a session needs another's contract changed, it **proposes additively back
-   to the owner** (see ECOSYSTEM §6) — it never redefines semantics locally.
+   to the owner** (see ECOSYSTEM §8) — it never redefines semantics locally.
 4. When a contract or a fact changes, **update this folder** — it is only useful
    while it is current.
+
+## Rollout status
+
+Tick a session once it has received its paste block and is reading this folder.
+This is the migration state — no need to copy files into each repo.
+
+- [ ] Taxes session aligned
+- [ ] Tax Adapter session aligned
+- [ ] MM Strategy / Trading lab session aligned
+- [ ] PM Kalshi session aligned
+- [ ] Arbitrage session aligned
+- [ ] VARDE session aligned
 
 ---
 
