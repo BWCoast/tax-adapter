@@ -36,7 +36,7 @@ Tick a session once it has received its paste block and is reading this folder.
 This is the migration state — no need to copy files into each repo.
 
 - [ ] Taxes session aligned
-- [ ] Tax Adapter session aligned
+- [x] Tax Adapter session aligned (2026-06-14)
 - [ ] MM Strategy / Trading lab session aligned
 - [ ] PM Kalshi session aligned
 - [ ] Arbitrage session aligned
