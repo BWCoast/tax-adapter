@@ -165,3 +165,112 @@ Both anchored schemas are additive-versioned (Trading L6, Taxes ADR-0004). The
 mapping carries an `adapter_schema_version` in provenance; new upstream fields
 are absorbed additively, existing mappings never change meaning without a new
 ADR superseding this file.
+
+---
+
+## 7. Happy Path 1 — MM Strategy spot buy (end-to-end worked example)
+
+The first path to be wired end-to-end (ADR-003): **MM Strategy Bot / Trading
+lab → adapter → Taxes intake**, deliberately the simplest scenario — one vanilla
+**fiat-quoted spot buy**, one venue, `book=lab`, no derivative, no swap, no
+transfer. It is the only fully one-sided spot case (§3.1 row 1): a single
+`ACQUISITION` plus a `FEE`, no SWAP disposal leg, and — because the quote is NOK
+— no FX tier needed for `nok_value`. This worked example is the contract the
+first golden fixture is pinned against.
+
+> Later happy paths extend this spine, not replace it: **HP-2** adds a
+> stablecoin-quoted buy (a two-leg SWAP, §3.1); **HP-3** adds a derivative
+> realized-PnL fill (§3.2, characterization per ADR-002). Spot-only first.
+
+### 7.1 Input — one `trade_ledger` row (the only consumed fields shown)
+
+```
+venue:               kraken
+account:             lab-main
+instrument.symbol:   BTC/NOK
+instrument.product_type: spot
+instrument.base:     BTC
+instrument.quote:    NOK
+instrument.settle:   NOK
+order_id:            ord_8f31
+trade_id:            trd_a12b
+decision_id:         dec_77c0
+strategy_id:         mm_v1
+mode:                live
+book:                lab
+side:                buy
+qty:                 0.05000000          # Decimal, BTC acquired
+price:               600000.00           # Decimal, NOK per BTC
+fee:                 150.00              # Decimal
+fee_asset:           NOK
+fill_kind:           taker
+realized_pnl_quote:  0                   # a buy — no realized PnL
+fx_usdnok_at_fill:   {rate: "10.7421", source: "norgesbank.eod", as_of_ts: "2026-03-02T00:00:00Z"}
+exchange_ts:         2026-03-02T10:15:30Z
+recv_ts:             2026-03-02T10:15:30.412Z
+run_id:              run_2026_03_02_001
+session_id:          sess_5e
+git_commit:          a1b2c3d
+schema_version:      trade_ledger/3
+```
+
+### 7.2 Output — exactly two canonical `Event` rows
+
+Per §3.1 (fiat-quoted buy → `ACQUISITION` of base; plus a `FEE` leg for the
+non-zero fee). `nok_value` for the acquisition is the NOK notional `qty × price`
+(quote already NOK, no FX applied); the fee is already NOK. The adapter performs
+no tax math — only the quote-currency notional and a verbatim fee pass-through.
+
+**Event 0 — ACQUISITION**
+```
+event_id:          ledger:run_2026_03_02_001:trd_a12b:0
+timestamp:         2026-03-02T10:15:30Z            # from exchange_ts (UTC); reported Europe/Oslo downstream
+event_type:        ACQUISITION
+asset:             BTC
+quantity:          0.05000000                       # Decimal, positive
+nok_value:         30000.00                          # 0.05 × 600000, quote=NOK
+source_id:         trade_ledger:lab
+source_row_index:  0                                 # stable sort key (exchange_ts, trade_id, leg)
+provenance:        {adapter_schema_version, decision_id: dec_77c0, order_id: ord_8f31,
+                    trade_id: trd_a12b, strategy_id: mm_v1, experiment_hash, book: lab,
+                    mode: live, run_id: run_2026_03_02_001, git_commit: a1b2c3d,
+                    fx_usdnok_at_fill: {rate, source, as_of_ts}, raw_row: {…}}
+```
+
+**Event 1 — FEE**
+```
+event_id:          ledger:run_2026_03_02_001:trd_a12b:1
+timestamp:         2026-03-02T10:15:30Z
+event_type:        FEE
+asset:             NOK
+quantity:          150.00                            # Decimal, positive
+nok_value:         150.00                            # fee already in NOK
+source_id:         trade_ledger:lab
+source_row_index:  1
+provenance:        {… same chain as Event 0, leg: 1 …}
+```
+
+No NOK disposal event is emitted: NOK is home fiat, not a taxable asset disposal
+in Norway — which is exactly why a fiat-quoted buy is one-sided (contrast the
+stablecoin-quoted SWAP of §3.1 / HP-2).
+
+### 7.3 Determinism & idempotency (per §4)
+
+- `event_id` is `ledger:{run_id}:{trade_id}:{leg}` — re-importing this row emits
+  byte-identical Events; a second import is a no-op.
+- `source_row_index` comes from the stable sort `(exchange_ts, trade_id, leg)` —
+  acquisition (leg 0) before fee (leg 1), reproducibly.
+- No clock, no randomness, no network in the mapping.
+
+### 7.4 Test (the first golden fixtures)
+
+| fixture | owner | content |
+|---|---|---|
+| input ledger row | Trading (schema-faithful until live) | the §7.1 row, byte-pinned |
+| expected Events | Adapter | the two §7.2 rows, byte-pinned |
+| intake check | Taxes | `Taxes/` ingests the two rows without error (20-column `events.csv`) |
+
+Gate to run it for real: the **`trade_ledger` → adapter transport** decision
+(§3 SOURCES / PROGRESS open item 2) and the first live (or schema-faithful) lab
+row. Build against real exported rows or schema-faithful fixtures — never an
+imagined shape (GOTCHAS 11); re-verify when the first live ledger lands.

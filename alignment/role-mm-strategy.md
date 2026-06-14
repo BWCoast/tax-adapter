@@ -7,6 +7,13 @@
 > fee, funding, transfer, settlement, or book semantics, do not redefine them
 > locally — propose an additive change back to the Tax Adapter alignment folder.
 
+> **You are first.** Per [`ADR-003`](../decisions/ADR-003-first-end-to-end-producer-mm-spot.md),
+> MM Strategy / Trading lab is the **first producer wired end-to-end**, because
+> `trade_ledger` is already a frozen contract. The first happy path is
+> **spot-only** (one fiat-quoted spot buy → `ACQUISITION` + `FEE`), pinned in
+> adapter [`SCHEMAS.md`](../SCHEMAS.md) §7. Your gating contribution: settle the
+> `trade_ledger → adapter` **transport** (ECOSYSTEM §8 OPEN item).
+
 ## Your lane
 *What happened (you produce it).* You are the market-making / funding strategy
 lab. You own `trade_ledger` and the engines that write it. You are the primary

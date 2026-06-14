@@ -52,6 +52,22 @@ Nothing is implemented yet, by design.
 | PM algo export contract agreed | build the prediction-market export adapter |
 | capital router live (Trading ADR-006) | wire the TRANSFER_OUT/IN book-transfer path (A8) |
 
+- **[Step 7] Built the `alignment/` coordination layer** — one canonical
+  `ECOSYSTEM.md` (topology, ownership, binding-priority, anti-patterns, shared
+  invariants, structured OPEN items, owner-tagged SovereignForge takeaways) +
+  thin per-session role cards (Taxes, Tax Adapter, MM/Trading, PM/Kalshi,
+  Arbitrage, VARDE, generic producer template) + a README with per-session
+  paste-prompts and a rollout checklist. Hub-only model: sibling repos read it
+  read-only; no copies to drift. This is the "one canonical brain prevents
+  session drift" lesson made structural.
+- **[Step 8] Picked the first end-to-end path** (decisions/ADR-003): **MM
+  Strategy / Trading lab** is the first producer wired (its `trade_ledger`
+  contract is already frozen), and the first happy path is **spot-only** — a
+  fiat-quoted spot buy → one `ACQUISITION` + one `FEE`. Worked example pinned in
+  SCHEMAS.md §7 (Happy Path 1); becomes the first golden fixture. HP-2 (swap) /
+  HP-3 (derivative) extend the spine later. This raises the `trade_ledger →
+  adapter` transport (open item 2) to the gating unknown for HP-1.
+
 ### Open questions / next steps
 1. **Confirm with the `Taxes` session** that `ledger:`/`pm-algo:` event_id
    prefixes are acceptable and reserved (A10) — propose as an ADR-0001 addendum
