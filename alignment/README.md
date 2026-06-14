@@ -136,3 +136,88 @@ funding, transfer, settlement, or book semantics locally. When you become a
 first-class project, copy the template to role-<name>.md and propose contract
 changes back to the Tax Adapter alignment folder.
 ```
+
+---
+
+## Active task prompts — HP-1 cycle (opened 2026-06-14)
+
+**Time-bound, unlike the evergreen blocks above.** These drive the first
+end-to-end path (ADR-003: MM spot-only). Paste the targeted block *after* that
+session's generic block. Retire a block when its `ECOSYSTEM.md §8` OPEN items
+flip to settled. The two can run **in parallel** — the Taxes prep does not
+depend on Trading's transport choice.
+
+### Trading / MM Strategy — settle transport + produce HP-1 fixture
+```
+You have already read ECOSYSTEM.md and role-mm-strategy.md. Now also read the
+adapter's decisions/ADR-003 (MM = first producer, HP-1 = spot-only) and
+SCHEMAS.md §7 (Happy Path 1 worked example).
+
+Your job this session is to unblock HP-1 for the Tax Adapter with exactly two
+deliverables, both fully inside the Trading lab's ownership:
+
+1. DECIDE + DOCUMENT the trade_ledger -> Tax Adapter transport for HP-1.
+   Pick one concrete, file-based transport (read-only CSV drop, or a read-only
+   SQLite/Parquet snapshot, or equivalent). It MUST be:
+     - read-only from the adapter's point of view,
+     - deterministic/reproducible (same Trading input -> same export bits),
+     - append-only (no in-place mutation of historical rows).
+   Output: a short transport description committed in the Trading repo, plus a
+   one-line confirmation that HP-1 depends on it. Reference it by path from the
+   ECOSYSTEM.md §8 "trade_ledger -> adapter transport" OPEN item.
+
+2. PRODUCE one schema-faithful trade_ledger fixture row for HP-1.
+   Per ADR-003 / SCHEMAS.md §7: a fiat-quoted, spot-only BUY on the frozen
+   trade_ledger contract (ADR-005/006). No derivatives, no SWAP leg, no FX tier,
+   no allocations. The row must be fully valid per the trade_ledger schema,
+   minimal but realistic, and carry every field SCHEMAS.md §7 marks as consumed.
+   Emit it in the transport format chosen in (1), e.g.
+   fixtures/trade_ledger/hp1_spot_buy.csv. Output: the fixture committed in the
+   Trading repo + a note confirming it is contract-faithful, so the adapter can
+   build its first golden fixture without inventing any Trading-side semantics.
+
+Scope / guardrails:
+- You do NOT define tax semantics, Event layout, or P&L rules — those are Taxes
+  and the Tax Adapter (per the alignment docs).
+- You DO own: how trade_ledger is exported for HP-1, and the exact contents of
+  the HP-1 row.
+- If HP-1 seems to need a NEW trade_ledger field, do not compute it locally for
+  the adapter — propose an additive schema bump back via the Tax Adapter
+  alignment folder.
+
+Done = ECOSYSTEM.md §8 OPEN items "trade_ledger -> adapter transport" and
+"HP-1 schema-faithful trade_ledger fixture" can both flip OPEN -> settled, each
+with a clear reference into the Trading repo.
+```
+
+### Taxes — confirm HP-1 intake + reserve event_id prefixes (runs in parallel)
+```
+You have already read ECOSYSTEM.md and role-taxes.md. Now also read the adapter's
+decisions/ADR-003 and SCHEMAS.md §7 (the two exact Event rows HP-1 emits: one
+ACQUISITION of BTC + one FEE in NOK).
+
+Your job this session is to make the Taxes core ready to RECEIVE HP-1 Events,
+with two deliverables inside the Taxes lane (independent of Trading's transport):
+
+1. RESERVE the adapter's event_id prefixes. Confirm `ledger:` and `pm-algo:`
+   are reserved and collision-free against your existing prefixes
+   (inflow_group:, xrpl:, csv:). Record it as an ADR-0001 addendum. This closes
+   the ECOSYSTEM.md §8 "event_id prefixes" OPEN item.
+
+2. CONFIRM intake of the SCHEMAS.md §7 Event rows. Verify the two rows ingest
+   into the 20-column events.csv intake without error, with no tax math required
+   at ingest. If any required column the adapter does NOT populate would reject
+   the row, list it precisely so the adapter can map or mark it UNRESOLVED.
+
+Scope / guardrails:
+- You OWN the Event contract and all tax characterization; ratify Event changes
+  in your own ADRs.
+- You do NOT reach into the adapter's mapping or Trading's ledger. For anything
+  you need from them, request an additive change via the alignment folder.
+- `event_type` from the adapter is normalization, not a tax ruling — you do the
+  ruling at compute time, not at intake.
+
+Done = the "event_id prefixes" §8 OPEN item flips OPEN -> settled (ADR-0001
+addendum), and HP-1 intake is confirmed (or a precise list of required-but-
+unpopulated columns is sent back to the adapter).
+```

@@ -182,10 +182,17 @@ OPEN: event_id prefixes for adapter-produced events
 
 OPEN: trade_ledger → adapter transport
   owner:           Trading (decide with Tax Adapter)
-  blocking_for:    adapter reading live canonical rows
+  blocking_for:    adapter reading live canonical rows; Happy Path 1 (HP-1)
   decision_needed: how canonical rows are handed over (file drop vs shared
                    read-only export). Schema is settled; only transport is open.
   target_doc:      Trading ADR (transport) + adapter SOURCES.md
+
+OPEN: HP-1 schema-faithful trade_ledger fixture
+  owner:           Trading (produce) + Tax Adapter (consume)
+  blocking_for:    the adapter's first golden fixture (SCHEMAS §7 / ADR-003)
+  decision_needed: one contract-faithful fiat-quoted spot-buy row, emitted in
+                   the chosen HP-1 transport format
+  target_doc:      Trading repo fixture (e.g. fixtures/trade_ledger/hp1_spot_buy.csv)
 
 OPEN: prediction-market export contract
   owner:           PM algo (conform) + Tax Adapter (define shape)
