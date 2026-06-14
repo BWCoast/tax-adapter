@@ -2,6 +2,44 @@
 
 Date: 2026-06-14 · From: scoping session · To: next tax-adapter session
 
+---
+
+## ⏭ Next sessions — pick up here (latest: 2026-06-14, alignment + HP-1 session)
+
+Since the scoping handoff below, this session added the cross-session
+**alignment layer** and decided + specified the **first end-to-end path**.
+State is current; the ball is now in *other* repos, not this one.
+
+**What's done (citeable):**
+- `alignment/` — canonical `ECOSYSTEM.md` (topology, ownership, binding
+  priority, anti-patterns, invariants, OPEN items, SovereignForge takeaways) +
+  per-session role cards + README paste-prompts. Hub-only; siblings read it
+  read-only.
+- **HP-1 decided** — `decisions/ADR-003`: MM Strategy / Trading lab is the first
+  producer wired; HP-1 = a fiat-quoted **spot-only** buy (→ `ACQUISITION` +
+  `FEE`); derivatives/swaps deferred to later happy paths.
+- **HP-1 specified** — `SCHEMAS.md §7`: concrete input row, the two exact Event
+  rows, determinism notes, first golden-fixture plan.
+- **Tracked + delegated** — `ECOSYSTEM.md §8` OPEN items (transport, HP-1
+  fixture, event_id prefixes) + `alignment/README.md` "Active task prompts —
+  HP-1 cycle" (Trading + Taxes blocks, retire-when-settled).
+
+**Do NOT add more design in the adapter until the producer + tax core move.**
+The next actions live elsewhere:
+- **Next Trading session:** paste the generic MM block, then the HP-1 Trading
+  prompt (`alignment/README.md`) → choose/document transport + produce one
+  contract-faithful HP-1 `trade_ledger` fixture row.
+- **Next Taxes session:** paste the generic Taxes block, then the HP-1 Taxes
+  prompt → reserve `ledger:`/`pm-algo:` event_id prefixes (ADR-0001 addendum) +
+  confirm the §7 Event rows ingest (or return required-but-unpopulated columns).
+
+**When they report back**, the adapter unblocks: build the `trade_ledger`→Event
+mapper for HP-1 (TDD, pin the §7 rows as the first golden fixture), then flip the
+relevant `ECOSYSTEM.md §8` OPEN items to settled. The live-rows gate still holds
+for anything beyond HP-1.
+
+---
+
 ## TL;DR
 
 The **tax-adapter** repo was scoped and documented. It is a **translation
