@@ -49,6 +49,7 @@ it. A stale alignment doc is a bug, not an authority.
 
 ```
   MM Strategy Bot / Trading lab (trade_ledger) ─┐
+  SovereignForge (Norwegian fork) trade_ledger  ─┤
   Prediction-Market algo (Kalshi)               ─┤
   Arbitrage Bot                                  ─┼─► Tax Adapter ─► Taxes/ ─► capital router
   VARDE (future)                                 ─┤   (this repo)    (tax core)   (consumer)
@@ -62,14 +63,17 @@ it. A stale alignment doc is a bug, not an authority.
 | **Taxes** | `Documents/Taxes` | Tax authority of record. **Sets requirements.** Owns the canonical Event contract + deterministic tax core. |
 | **Tax Adapter** | `Documents/Tax adapter` | Translation layer. Owns source→Event **mapping** only. The hub that holds this alignment folder. |
 | **MM Strategy Bot / Trading lab** | `Documents/Trading` | Producer. Owns `trade_ledger`, intent, order contracts, the two-book model. |
+| **SovereignForge** | `Documents/SovereignForgeV1` (Norwegian operator's fork: `BWCoast/SovereignForgeV1`) | Producer (promotion 2026-06-14, **PROPOSED** ratification). Emits canonical `trade_ledger` v3 rows via a thin translator over its existing DAC8 chain. Strategy: OFG-DCA spot-only on Bybit-EU USDC. Reserved `event_id` prefix `sf:ofg:`. Branch: `claude/norway-producer-seam`. Detail: `SOURCES.md` §4, `proposals/sf_producer_recognition_PROPOSED.md`. |
 | **Prediction-Market algo (Kalshi)** | `Documents/PM algo` | Producer. Standalone bot; conforms to the adapter's export contract. |
 | **Arbitrage Bot** | *repo path TBD* | **First-class planned producer** — not yet built / not yet feeding the pipeline. First-class in the topology now (not a generic future system). |
 | **VARDE** | *repo path TBD* | **First-class planned producer** (another bot) — not yet built / not yet feeding the pipeline. First-class now, specifics OPEN. |
 | **Capital router / dashboards / pnl-service** | *future* | Consumers. Downstream of realized PnL and tax Events. |
 
-`SovereignForgeV1` (`Documents/SovereignForgeV1`) is **platform context only** —
-a live-trading Belgian sibling we mine for patterns/failure modes (see §9). Its
-tax *specifics* do not transfer; it is not a contract dependency.
+> **Note (superseded 2026-06-14):** an earlier framing called `SovereignForgeV1`
+> "platform context only — not a contract dependency." That framing reflected the
+> pre-Norwegian-fork state; SF is now a live producer (PROPOSED ratification).
+> The five PATTERNS in §9 (A1–A5) still apply as mining-only; the SF role above
+> is the contract dependency.
 
 ## 5. Ownership & direction of authority
 

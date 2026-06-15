@@ -68,13 +68,48 @@ export set (see SCHEMAS.md §3.4):
 PM algo's own ledger semantics stay its concern; only the export contract is
 shared. The adapter never reaches into its DB or logs (A1).
 
-## 4. Platform context
+## 4. Upstream — SovereignForge (Belgium-built bot; Norwegian operator's fork)
 
-**`Documents/SovereignForgeV1`** — broader platform/orchestration context
-(`repo/README.md`, `roadmap.md`, `AGENTS.md`, `CLAUDE.md`). Read for the
-system-wide module map (market-data / strategy-engine-* / risk / execution /
-ledger / pnl / capital-router / tax-export) the adapter slots into. Not a
-direct contract dependency.
+**`Documents/SovereignForgeV1`** — **PRODUCER (2026-06-14 promotion, PROPOSED ratification).**
+SovereignForge is a single-strategy crypto trading bot. The original (Belgian) operator
+runs it for himself; the Norwegian operator has a fork (BWCoast/SovereignForgeV1) that
+emits canonical `trade_ledger` v3 rows for this adapter. The fork branch in scope:
+`claude/norway-producer-seam` (pushed 2026-06-14).
+
+Producer role:
+- Strategy: OFG-DCA (Operator Fib-Grid DCA) on Bybit-EU USDC, spot-only.
+- Mechanism: SovereignForge records every fill into its existing DAC8 HMAC chain
+  (`data/dac8_fills.jsonl`) for Belgian compliance; a thin translator
+  (`src/exports/trade_ledger_export.py`) reads that chain and emits canonical
+  `trade_ledger` v3 CSV rows that this adapter consumes read-only.
+- Producer identity in exported rows: `account="sf_personal_main"` (operator-overridable),
+  `strategy_id="ofg_dca"`, `book="accrual"` (OFG-DCA IS the accrual book per Trading
+  ADR-006).
+- Reserved `event_id` prefix: `sf:ofg:` (per Taxes ADR-0001 addendum 2026-06-14, PROPOSED).
+
+| file | what it gives the adapter |
+|---|---|
+| (fork) `src/exports/trade_ledger_export.py` | the `FillRecord → trade_ledger v3` mapper (30 columns, byte-faithful to Trading ADR-007) |
+| (fork) `scripts/export_trade_ledger.py` | CLI: `python scripts/export_trade_ledger.py --jurisdiction NO` produces a deterministic CSV at `data/exports/trade_ledger.csv` |
+| (fork) `docs/norway_producer_seam_handoff.md` | canonical handoff: field-mapping table (§3), priority-ordered OPEN items (§5), patterns from `TAKEAWAY-SOVEREIGNFORGE.md` (§6) |
+| (this repo) `proposals/sf_producer_recognition_PROPOSED.md` | this session's draft of the adapter-side changes — SOURCES (this §4), ECOSYSTEM §4 topology, SCHEMAS §3 footnotes |
+
+**Live-rows status:** SovereignForge's DAC8 chain exists today and contains real
+fills. The Norwegian operator's fork can emit `trade_ledger` rows immediately —
+independent of MM/Trading lab's HP-1 progression. SF is the **second producer** to
+come online for this adapter (after MM/Trading lab).
+
+**Authority rule:** SovereignForge owns its DAC8 chain shape (Belgian operator's
+contract); SovereignForge's trade_ledger export conforms to Trading's v3 contract
+read-only. SovereignForge does NOT own tax semantics — those remain in this
+adapter and the Taxes core (LAWS A4). Additive contract changes flow back to
+Trading; tax-treatment questions flow to Taxes.
+
+**Patterns (read-only mining, not contract dependencies):** see
+`TAKEAWAY-SOVEREIGNFORGE.md` for the five patterns (A1 Oslo year boundary, A2 FX
+tiering, A3 classification defense, A4 tamper-evident ledger, A5 verbatim decimal
+strings) and their owner tags. Belgian tax *specifics* (`speculative_33`,
+2025-12-31 step-up) do NOT transfer; the *patterns* do.
 
 ## 5. Reusable patterns (extract, don't import)
 
