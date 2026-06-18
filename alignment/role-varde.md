@@ -1,57 +1,161 @@
 # ROLE — VARDE
 
 > Read [`ECOSYSTEM.md`](ECOSYSTEM.md) first. This card is your lane within it.
-> Repo: *(TBD — not yet built / not yet feeding the tax pipeline)*.
+> Repo: `C:\Users\mrkro\Documents\Offshore trading\varde` (local; no GitHub remote yet).
 >
 > **No local override.** If this session needs different ledger, Event, P&L,
 > fee, funding, transfer, settlement, or book semantics, do not redefine them
 > locally — propose an additive change back to the Tax Adapter alignment folder.
 
 ## Status
-**Another bot, not yet built out and not yet feeding the Taxes pipeline.** This
-card reserves VARDE's place in the topology so it doesn't get bolted on later as
-an afterthought. Treat the producer mechanics via
-[`role-producer-template.md`](role-producer-template.md) until VARDE has a
-distinct, settled purpose — then sharpen this card. Everything below the lane is
-**OPEN**; do not invent specifics.
+
+**Planned producer — built out but not yet wired into the Taxes pipeline.**
+VARDE is a running system (127 tests, FastAPI + SQLite, Windows desktop app).
+The three OPEN questions below are now settled; the export schema gaps are
+OPEN additive bumps (see §OPEN items). VARDE does not yet emit any export the
+adapter reads.
+
+## VARDE's distinct purpose (settled 2026-05-12)
+
+Norwegian retail crypto portfolio manager for a single operator. It:
+- Manages capital across multiple CEX venues (Firi NOK, Kraken, Binance, ByBit)
+  and XRPL, via a shared capital router and strategy runners.
+- Runs three strategy types: DCA accumulation, Swing/RSI, and XRPL Market Maker.
+- Tracks all fills in a local SQLite database (`varde.db`, `Trade` table).
+- Has a capital router (`CapitalAccount`, `CapitalTransaction`) that allocates
+  realized gains to tax-reserve, fee-buffer, and accumulation buckets.
+
+VARDE is **distinct from the Trading lab / MM Strategy Bot** — different operator,
+different repo, different strategy set, different execution stack. It does not
+share the Trading lab's `trade_ledger`.
 
 ## Your lane
-*What happened (you produce it).* VARDE is a strategy/trading producer. When it
-goes live it emits fills/exports into the adapter and is **not** a tax,
-reporting, or allocation layer.
 
-## What you own (provisional)
-- VARDE's strategy logic, execution, and internal ledger.
-- Conforming to the adapter's interface — canonical `trade_ledger` rows *or* a
-  standalone conforming export (`SCHEMAS.md` §3.4). **Which one is OPEN** until
-  VARDE's shape is decided; record the decision here.
+*What happened (you produce it).* VARDE emits fills as a **standalone export**
+that conforms to the adapter's export contract. It is **not** a tax, reporting,
+or allocation layer (even though the internal capital router does allocation —
+that logic stays internal to Varde and does not flow into the export).
+
+## Export approach (settled 2026-05-12)
+
+**Standalone export** — VARDE will write a read-only, append-only export file
+(format TBD: CSV or SQLite snapshot; see OPEN: transport below) from its
+`Trade` table. The adapter reads that file; it does not read VARDE's internal
+DB directly.
+
+The export will conform to the adapter's minimum set
+([`role-producer-template.md`](role-producer-template.md)):
+fills, fees with `fee_asset`, deposits/withdrawals, FX at fill time, decimal
+strings, provenance chain, export-freshness stamp.
+
+## Instrument types that stress the load-bearing rules (settled 2026-05-12)
+
+Currently **spot-only**. Two quote-currency types are active:
+
+1. **NOK-quoted fills** (Firi: BTC/NOK, XRP/NOK) — simplest case. Maps to
+   one-sided `ACQUISITION` (buy) or `DISPOSAL` (sell) + `FEE`. Identical to
+   HP-1 (SCHEMAS.md §7). No FX tier needed for `nok_value` (quote already NOK).
+
+2. **Stablecoin/USD-quoted fills** (Binance: BTC/USDT, Kraken: BTC/USD) —
+   loads the **SWAP** rule (SCHEMAS.md §3.1): a stablecoin-quoted buy is a
+   disposal of the quote + acquisition of the base. `fx_usdnok_at_fill` is
+   required for `nok_value`.
+
+3. **XRPL transfers** (between XRPL wallet and CEX) — must emit linked
+   `TRANSFER_OUT` / `TRANSFER_IN` pairs, never disposal + acquisition.
+
+No derivatives currently. If VARDE adds perp trading later, that is an
+additive schema bump and requires a new OPEN item.
+
+## What you own
+
+- VARDE's strategy logic, execution, and internal `Trade` table.
+- Producing a conforming standalone export from that table.
+- `fee_asset`, `fill_kind`, `product_type`, `fx_usdnok_at_fill`, and the
+  provenance chain are VARDE's responsibility to record at fill time and
+  include in the export.
 
 ## What you must NOT do
-- Don't emit tax conclusions or tax P&L — emit *facts*.
+
+- Don't emit tax conclusions, P&L characterization, FIFO/S104, or valuations.
 - Don't define a private export format — conform to the adapter's contract.
-- Don't expect the adapter to read VARDE internals — declared fills/exports only
-  (A1).
+- Don't expect the adapter to read `varde.db` directly.
+- Don't compute or export `nok_value` — that's the adapter's job (using
+  `fx_usdnok_at_fill` you supply).
+- Don't embed allocation logic (tax-reserve routing, capital-bucket splits)
+  in the export. The capital router is internal to VARDE.
 
-## OPEN questions to settle before VARDE feeds the pipeline
-1. **What is VARDE's distinct purpose?** (If it's just another strategy under an
-   existing ledger, it may not need its own export at all — it writes
-   `trade_ledger` like the MM lab.)
-2. Standalone export vs shared `trade_ledger`?
-3. Any instrument types that stress the load-bearing rules (derivatives,
-   stablecoin quoting, internal transfers)?
+## Export schema gaps — OPEN additive bumps
 
-Until these are answered, VARDE is **not wired** and the adapter does not read
-it.
+VARDE's current `Trade` model (`apps/api/models.py`) covers:
+`id, user_id, exchange, symbol, side, qty, price, fee, ts, pnl, status`
+
+Fields the adapter requires that VARDE's `Trade` table currently lacks:
+
+| Missing field | Needed for | Priority |
+|---|---|---|
+| `fee_asset` | FEE event `asset` field | HIGH — blocks any FEE mapping |
+| `fill_kind` | maker/taker/funding routing | HIGH — blocks correct event_type |
+| `product_type` | spot vs derivative guard | HIGH — blocks load-bearing rule enforcement |
+| `fx_usdnok_at_fill` | `nok_value` for non-NOK fills | HIGH — blocks USDT-quoted mapping |
+| `order_id` / `trade_id` | deterministic `event_id` | HIGH — blocks `ledger:{run_id}:{trade_id}:{leg}` |
+| `decision_id` / `strategy_id` | provenance chain | MEDIUM |
+| `book` | `source_id` (`trade_ledger:lab` vs `:accrual`) | MEDIUM |
+| `mode` | live/paper/sim provenance | MEDIUM |
+| `run_id` / `git_commit` | export-freshness + `event_id` | MEDIUM |
+| `schema_version` | contract-version pinning | LOW |
+
+The local `pnl` column is a VARDE-internal performance tracker, not an
+export field. The adapter does not consume it. Do not confuse it with
+`realized_pnl_quote` (adapter field for derivative fills — not applicable to
+VARDE spot trades).
+
+## OPEN items
+
+```
+SETTLED: VARDE export transport (2026-05-12)
+  decision:        CSV drop — VARDE writes varde-fills.csv to db-backup/ alongside
+                   varde.db. Synology Drive picks both up. Adapter reads CSV; never
+                   reads varde.db directly. Rows are appended only; no in-place
+                   mutation of historical rows. Sort key: (exchange_ts, trade_id).
+  target_doc:      VARDE scripts/export-fills.py + adapter SOURCES.md (pending)
+
+OPEN: VARDE Trade model schema bumps
+  owner:           VARDE (implement additive columns)
+  blocking_for:    producing a contract-faithful export row
+  decision_needed: add fee_asset, fill_kind, product_type, fx_usdnok_at_fill,
+                   order_id, trade_id to Trade model; maintain backward compat
+                   for existing rows (nullable, filled on new fills only)
+  target_doc:      VARDE apps/api/models.py + a VARDE CHANGELOG or ADR
+
+OPEN: VARDE HP-1 fixture
+  owner:           VARDE (produce) + Tax Adapter (confirm contract-faithful)
+  blocking_for:    adapter building its first VARDE golden fixture
+  decision_needed: one schema-faithful NOK-quoted spot BUY row (like SCHEMAS §7
+                   HP-1 but from VARDE's export, not Trading lab's trade_ledger)
+  target_doc:      VARDE fixtures/export/hp1_nok_spot_buy.csv
+```
 
 ## SovereignForge takeaways tagged to you
-Inherit the ecosystem invariants (§7) and, once trading is systematic, **A3
-classification-defense** — keep activity dated and auditable from the first
-fill, because that evidence is impossible to reconstruct after the fact.
+
+Inherit ecosystem invariants (§7). Priority for VARDE:
+
+- **A3 classification-defense**: record that parameters were set by the operator,
+  not the algorithm. Capture `strategy_id`, `mode`, `decision_id` from the first
+  fill — impossible to reconstruct later.
+- **A4 tamper-evident ledger**: consider a row-hash chain on `Trade` inserts —
+  the `AuditLog` table partially covers this but is not append-only fill provenance.
+- **A5 verbatim decimal strings**: `Trade.qty/price/fee` are currently `Float` —
+  they must become `Text` (Decimal strings) before export. A schema migration is
+  needed (same pattern as `CapitalAccount.balance` which already uses `Text`).
 
 ## How to request a contract change
+
 Propose additive changes to the **Tax Adapter** alignment folder (export shape)
-or the **Trading** session (shared ledger). Never redefine semantics locally.
+or the **Trading** session (shared ledger). Never redefine Event/ledger semantics
+locally.
 
 ## Read order
+
 `ECOSYSTEM.md` → this card → [`role-producer-template.md`](role-producer-template.md)
-→ adapter [`SCHEMAS.md`](../SCHEMAS.md).
+→ adapter [`SCHEMAS.md`](../SCHEMAS.md) §3.4.

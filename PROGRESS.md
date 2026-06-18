@@ -80,3 +80,30 @@ Nothing is implemented yet, by design.
    set) and have the PM algo session conform.
 4. **Build only against real exported rows or schema-faithful fixtures** — not
    an imagined shape; re-verify when the first live ledger lands (GOTCHAS 11).
+
+## 2026-06-18
+
+- **[Step 9] Read the `Trading Alignment/` stack hub** (created 2026-06-17 — a
+  no-code, stack-wide alignment repo covering all five pipeline stages; it names
+  this repo's `alignment/ECOSYSTEM.md` as its precursor). **Operator decision:
+  `Trading Alignment/` is the canonical stack-wide hub**; this folder narrows to
+  the adapter's role cards + producer coordination, with a pointer up
+  (`ECOSYSTEM.md §0`). Cross-cutting OPEN items are now authoritative in
+  `Trading Alignment/GAPS.md` (OPEN-1…13).
+- **Status deltas confirmed upstream:** HP-1 fixture row exists
+  (`Trading/fixtures/trade_ledger/hp1_spot_buy.csv`, matches SCHEMAS §7);
+  transport = deterministic CSV exporter (Trading ADR-007), mechanism still open;
+  `event_id` registry formalized + Taxes-owned (Trading Alignment ADR-006 + Taxes
+  ADR-0001-addendum). Producers registered: arb-bot (`arb:`), VARDE (`varde:`),
+  SF-NO fork (`sf:ofg:`). The VARDE session has filled in `role-varde.md` (it's
+  the `Offshore trading` repo).
+- **[Step 10 — FINDING] `SCHEMAS.md` misrepresents the `events.csv` contract.**
+  Verified against `Taxes/src/tax_core/models/event.py`: the real `CanonicalEvent`
+  is **bilateral** (`asset_out/in`, `quantity_out/in`, `fee_asset/quantity`,
+  `nok_value_out/in`, 4 provenance keys) with `event_type ∈ {TRADE, TRANSFER_IN/OUT,
+  INCOME, FEE, GIFT_IN/OUT, REQUIRES_REVIEW}`. Our §1/§7 use single-sided
+  `ACQUISITION/DISPOSAL/SWAP` + `asset/quantity/nok_value` — which the Taxes model
+  rejects at construction. Recorded as a FINDING in `ECOSYSTEM.md §8`.
+  **Resolution (operator): do NOT align the adapter to the Firi parser; a dedicated
+  build/P&L adapter will reconcile the output shape.** `SCHEMAS.md` left unchanged
+  (record-only) pending that work.

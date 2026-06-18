@@ -1,6 +1,6 @@
 # ECOSYSTEM — canonical alignment for all tax/trading sessions
 
-> **Status:** binding · **Owner:** Tax Adapter session (this repo) · **Updated:** 2026-06-14
+> **Status:** binding · **Owner:** Tax Adapter session (this repo) · **Updated:** 2026-06-14 (§0 scope note added 2026-06-18)
 >
 > This is the shared mental model for every session in the ecosystem. Read it
 > before doing tax/trading/reporting work in *any* repo. It does not replace a
@@ -8,6 +8,23 @@
 > owns what, and the invariants none of them may break. Where this doc and an
 > owning repo's contract disagree, **the owning repo wins** (see §3 precedence)
 > and this doc is stale — fix it.
+
+---
+
+## 0. Scope note — this folder's place in the stack (added 2026-06-18)
+
+The canonical **stack-wide** map is now `C:\Users\mrkro\Documents\Trading Alignment\`
+— a no-code alignment repo covering all five pipeline stages (Build → Trade →
+Capital Router → Tax Adapter → Tax Software) with its own TOPOLOGY, STATUS,
+CONTRACTS, GAPS, and cross-cutting ADRs. It (correctly) names this repo's
+`ECOSYSTEM.md` as its **precursor**.
+
+This folder now **narrows** to the Tax Adapter's own role cards + producer-export
+coordination. For stack topology, the frozen seam contracts, the `event_id`
+registry, and cross-cutting OPEN items, **defer to `Trading Alignment/`** — where
+the two overlap, Trading Alignment wins and this folder is fixed. The per-session
+role cards and the producer coordination here remain useful and live (producer
+sessions write their settled decisions into them).
 
 ---
 
@@ -177,6 +194,16 @@ OPEN: <short title>
 
 ### Open cross-session items (carried from `HANDOFF.md` / `PROGRESS.md`)
 
+> **Authoritative tracker (2026-06-18):** cross-cutting OPEN items now live in
+> `Trading Alignment/GAPS.md` (OPEN-1…OPEN-13). The items below are the adapter's
+> local mirror — where they differ, GAPS.md wins. Status deltas found in the
+> 2026-06-18 cross-repo read: the HP-1 fixture row now exists upstream
+> (`Trading/fixtures/trade_ledger/hp1_spot_buy.csv`, matches SCHEMAS §7); transport
+> format is a deterministic CSV exporter (Trading ADR-007), mechanism still open
+> (GAPS OPEN-3); the `event_id` registry is formalized and Taxes-owned (Trading
+> Alignment ADR-006 + Taxes ADR-0001-addendum), `ledger:`/`pm-algo:` still pending
+> ratification.
+
 ```
 OPEN: event_id prefixes for adapter-produced events
   owner:           Taxes (ratify) + Tax Adapter (propose)
@@ -212,11 +239,37 @@ OPEN: Arbitrage Bot wiring
                    that stress the load-bearing rules; repo path
   target_doc:      alignment/role-arbitrage.md + adapter SCHEMAS.md
 
-OPEN: VARDE definition & wiring
-  owner:           VARDE (when built) + Tax Adapter
-  blocking_for:    VARDE feeding the pipeline
-  decision_needed: VARDE's distinct purpose; shared ledger vs standalone export
-  target_doc:      alignment/role-varde.md
+OPEN: VARDE export transport
+  owner:           VARDE (decide) + Tax Adapter (confirm readable)
+  blocking_for:    VARDE feeding the pipeline; VARDE HP-1 fixture
+  decision_needed: file-based transport (CSV drop, SQLite snapshot, or Parquet);
+                   must be read-only from adapter view, append-only, deterministic.
+  target_doc:      alignment/role-varde.md + adapter SOURCES.md
+  note:            Purpose (Norwegian retail PM), export approach (standalone),
+                   and instrument types (spot, NOK+USDT-quoted + XRPL transfers)
+                   settled 2026-05-12 — see role-varde.md.
+
+OPEN: VARDE Trade model schema bumps
+  owner:           VARDE (implement)
+  blocking_for:    producing a contract-faithful export row
+  decision_needed: add fee_asset, fill_kind, product_type, fx_usdnok_at_fill,
+                   order_id, trade_id; migrate qty/price/fee Float→Text (Decimal)
+  target_doc:      VARDE apps/api/models.py
+
+FINDING: adapter SCHEMAS.md misrepresents the events.csv output contract
+  owner:           Tax Adapter (record) → resolved by a dedicated build/P&L adapter (operator)
+  blocking_for:    correctness of emitted Events (Taxes CanonicalEvent rejects the current shape)
+  decision_needed: SCHEMAS.md §1/§7 describe single-sided ACQUISITION/DISPOSAL/SWAP +
+                   asset/quantity/nok_value. The real Taxes events.csv (verified in
+                   Taxes/src/tax_core/models/event.py) is BILATERAL: event_type ∈
+                   {TRADE, TRANSFER_IN/OUT, INCOME, FEE, GIFT_IN/OUT, REQUIRES_REVIEW};
+                   columns asset_out/in, quantity_out/in, fee_asset/quantity,
+                   nok_value_out/in + 4 provenance keys. ACQUISITION/DISPOSAL/SWAP are
+                   adapter-internal semantics that must resolve into TRADE/TRANSFER_*.
+  resolution:      per operator (2026-06-18): do NOT align the adapter to the Firi parser;
+                   a dedicated build/P&L adapter will reconcile the output shape.
+                   SCHEMAS.md left UNCHANGED pending that work (record-only).
+  target_doc:      adapter SCHEMAS.md §1/§7 (future) + the planned build/P&L adapter
 ```
 
 ## 9. SovereignForge takeaways (owner-tagged)

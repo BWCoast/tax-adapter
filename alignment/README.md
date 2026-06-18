@@ -40,7 +40,7 @@ This is the migration state — no need to copy files into each repo.
 - [ ] MM Strategy / Trading lab session aligned
 - [ ] PM Kalshi session aligned
 - [ ] Arbitrage session aligned
-- [ ] VARDE session aligned
+- [x] VARDE session aligned (2026-05-12)
 
 ---
 
