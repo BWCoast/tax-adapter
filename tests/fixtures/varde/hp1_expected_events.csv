@@ -1,0 +1,3 @@
+event_id,timestamp,event_type,source_id,source_row_index,asset_out,quantity_out,asset_in,quantity_in,fee_asset,fee_quantity,income_subtype,label,notes,nok_value_out,nok_value_in,parser,parser_version,source_type,source_ref
+varde:varde-run-2026-03-02:varde-1:0,2026-03-02T10:15:30Z,TRADE,varde-fills:lab,0,NOK,30000.00000000,BTC,0.05000000,,,,,venue=firi;strategy_id=dca_v1;mode=live;book=lab;fill_kind=taker,30000.00,30000.00,varde_adapter,varde/1->event/1,varde-fills,varde-fills.csv#varde-1
+varde:varde-run-2026-03-02:varde-1:1,2026-03-02T10:15:30Z,FEE,varde-fills:lab,1,,,,,NOK,150.00000000,,,venue=firi;strategy_id=dca_v1;mode=live;book=lab;fill_kind=taker,150.00,,varde_adapter,varde/1->event/1,varde-fills,varde-fills.csv#varde-1

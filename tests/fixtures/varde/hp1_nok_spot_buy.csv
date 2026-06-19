@@ -1,0 +1,2 @@
+source_row_id,exchange_ts,venue,symbol,product_type,base,quote,side,qty,price,fee,fee_asset,fill_kind,realized_pnl_quote,fx_usdnok_at_fill,order_id,trade_id,strategy_id,book,mode,run_id,schema_version,generated_at
+1,2026-03-02T10:15:30Z,firi,BTC/NOK,spot,BTC,NOK,buy,0.05000000,600000.00000000,150.00000000,NOK,taker,0,"{""rate"": ""10.7421"", ""source"": ""norgesbank.eod"", ""as_of_ts"": ""2026-03-02T00:00:00Z""}",varde-ord-1,varde-1,dca_v1,lab,live,varde-run-2026-03-02,varde/1,2026-03-02T10:15:31Z

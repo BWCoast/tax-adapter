@@ -1,0 +1,14 @@
+[project]
+name = "tax-adapter"
+version = "0.1.0"
+description = "Translation layer: producer facts -> canonical tax events.csv"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+dev-dependencies = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

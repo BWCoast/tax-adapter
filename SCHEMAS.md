@@ -394,7 +394,7 @@ nok_value_out:     30000.00                       # advisory (quote=NOK → noti
 nok_value_in:      30000.00
 source_id:         varde-fills:lab
 source_row_index:  0                              # stable sort (exchange_ts, trade_id, leg)
-provenance:        {parser: "varde_adapter", parser_version: "varde/1→event/1",
+provenance:        {parser: "varde_adapter", parser_version: "varde/1->event/1",
                     source_type: "varde-fills", source_ref: "varde-fills.csv#varde-1",
                     producer: "varde", strategy_id: "dca_v1", order_id: "varde-ord-1",
                     trade_id: "varde-1", venue: "firi", instrument: "BTC/NOK", side: "buy",
