@@ -111,7 +111,52 @@ tiering, A3 classification defense, A4 tamper-evident ledger, A5 verbatim decima
 strings) and their owner tags. Belgian tax *specifics* (`speculative_33`,
 2025-12-31 step-up) do NOT transfer; the *patterns* do.
 
-## 5. Reusable patterns (extract, don't import)
+## 5. Upstream — VARDE (educational Norwegian retail PM; standalone declared export)
+
+**`Documents/Offshore trading`** (repo **VARDE**, `BWCoast/VARDE`) — **PRODUCER
+(facts-only; realigned 2026-06-19 per Trading Alignment ADR-004 / OPEN-12).** VARDE is
+an educational FastAPI + React trading platform for a single operator. It runs DCA /
+Swing / XRPL-MM **spot** strategies across Firi (NOK), Kraken, Binance, ByBit, and XRPL,
+recording fills in a local SQLite `Trade` table.
+
+Producer role:
+- **Facts-only.** VARDE's own FIFO lot store + Norwegian tax exporter were **removed**
+  (OPEN-12); tax output comes from the Taxes core via this adapter, like every other
+  producer. VARDE emits declared facts, never tax conclusions.
+- **Export contract:** VARDE conforms to the adapter's own export shape (not
+  `trade_ledger` v3) — the same per-producer pattern as PM algo (§3). 23-column CSV,
+  schema `varde/1`.
+- **Producer identity in rows:** `venue` (firi/kraken/binance/bybit), `book` (`lab`),
+  `mode` (`live`/`paper`), `strategy_id` (`dca_v1`, …).
+- **Reserved `event_id` prefix:** **`varde:`** (Trading Alignment ADR-006 / Taxes
+  ADR-0001 addendum, proposed).
+- **Instrument scope:** spot only — NOK-quoted (Firi) + USDC/USDT-quoted
+  (Kraken/Binance/ByBit) + XRPL wallet↔CEX transfers. No derivatives.
+
+| file | what it gives the adapter |
+|---|---|
+| (VARDE) `scripts/export_fills.py` | the facts exporter — stdlib-only, append-only, deterministic; writes `db-backup/varde-fills.csv` (schema `varde/1`, 23 cols, verbatim period-decimal, blank-for-missing, `pnl` not exported) |
+| (VARDE) `fixtures/export/hp1_nok_spot_buy.csv` | byte-pinned HP-1 golden fixture (Firi BTC/NOK spot buy) — the input the adapter's first VARDE golden test maps (→ SCHEMAS.md §3.7 HP-VARDE-001) |
+| (VARDE) `docs/adr/ADR-001-producer-only-tax.md` | VARDE's realignment record (facts-only; capital router deferred to OPEN-11) |
+| (this repo) `SCHEMAS.md §3.7` | the `varde-fills.csv` → bilateral `CanonicalEvent` mapping + HP-VARDE-001 worked example |
+
+**Transport:** append-only CSV drop — VARDE writes `varde-fills.csv` into `db-backup/`
+alongside `varde.db`; Synology Drive picks both up. The adapter reads the CSV
+**read-only**; it never reads `varde.db`. Physical row order = append-by-`source_row_id`;
+the adapter applies the canonical `(exchange_ts, trade_id, leg)` sort itself.
+
+**Authority rule:** VARDE owns its strategy logic, `Trade` table, and the
+`varde-fills.csv` export shape. It does **not** own tax semantics — those are this
+adapter + the Taxes core. VARDE's embedded capital router
+(`packages/tax/capital_router.py`) is internal cash-management, **not** tax, and does
+**not** flow into the export (CONTRACTS.md §4; deferred to OPEN-11). Additive contract
+changes flow back via the alignment folder.
+
+**Live-rows status:** VARDE produces real fills locally today; the facts export + HP-1
+fixture exist and are fixture-verified. Adapter-side ingestion (this §5 + SCHEMAS.md
+§3.7 + a mapper) is the remaining gate before VARDE feeds the pipeline end-to-end.
+
+## 6. Reusable patterns (extract, don't import)
 
 From the existing ecosystem, proven and worth copying into the adapter:
 - **Canonical-event normalization** (Taxes ADR-0001) — the adapter is a parser

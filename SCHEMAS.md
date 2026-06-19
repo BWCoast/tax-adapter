@@ -323,6 +323,114 @@ Taxes ADR-0001 addendum 2026-06-14 (PROPOSED).
 
 ---
 
+### 3.7 VARDE — standalone declared export (bilateral target shape)
+
+> **Producer:** VARDE (`Offshore trading`, `BWCoast/VARDE`) — educational Norwegian
+> retail crypto PM. Facts-only producer (Trading Alignment ADR-004 / OPEN-12).
+> Reserved `event_id` prefix **`varde:`**. Transport: append-only
+> `db-backup/varde-fills.csv`, schema `varde/1` (see SOURCES.md §5).
+>
+> **Shape note (read this first).** VARDE conforms to the adapter's *own* export
+> contract (not `trade_ledger` v3) — same per-producer pattern as PM algo (§3.4) and
+> arb-bot. This section is written natively in the **real bilateral `CanonicalEvent`
+> shape** verified against Taxes `src/tax_core/models/event.py`:
+> `event_type ∈ {TRADE, TRANSFER_IN/OUT, INCOME, FEE, GIFT_IN/OUT, REQUIRES_REVIEW}`
+> with `asset_out/in` + `quantity_out/in`, validated at construction by
+> `_validate_shape`. It does **not** use the single-sided `ACQUISITION/DISPOSAL/SWAP`
+> wording of §3.1/§7 — those stay record-only pending the doc-wide reconciliation
+> (ECOSYSTEM FINDING 2026-06-18). For VARDE, read `ACQUISITION/DISPOSAL/SWAP` as
+> resolving into the `TRADE` rows below.
+
+**Input — one `varde-fills.csv` row (`varde/1`, consumed columns):**
+`source_row_id, exchange_ts, venue, symbol, product_type, base, quote, side, qty,
+price, fee, fee_asset, fill_kind, realized_pnl_quote, fx_usdnok_at_fill, order_id,
+trade_id, strategy_id, book, mode, run_id`. Decimal strings are verbatim (period
+separator); missing = blank, never `0`; `realized_pnl_quote` is always `"0"` (VARDE
+is spot-only); the producer's internal `pnl` is **not** exported.
+
+**The mapping — in the bilateral model the quote-currency distinction collapses.**
+Every spot fill is a single **`TRADE`** (both legs present) plus a standalone
+**`FEE`**; the only difference between a NOK-quoted and a USDC/USDT-quoted fill is
+whether `nok_value` needs `fx_usdnok_at_fill`. (Single-sided "ACQUISITION vs SWAP" is
+an artifact of the old shape — a `TRADE` already carries both legs.)
+
+| varde-fills row | emitted events |
+|---|---|
+| `product_type=spot`, `side=buy` | `TRADE` (`asset_out=quote`, `quantity_out=qty×price`; `asset_in=base`, `quantity_in=qty`) + `FEE` |
+| `product_type=spot`, `side=sell` | `TRADE` (`asset_out=base`, `quantity_out=qty`; `asset_in=quote`, `quantity_in=qty×price`) + `FEE` |
+| quote = NOK (Firi) | `nok_value_out/in` = the NOK notional directly (`qty×price`); no FX tier needed |
+| quote = USDC/USDT (Kraken/Binance/ByBit) | `nok_value` requires `fx_usdnok_at_fill` `{rate,source,as_of_ts}`; if absent → `nok_value=None` (UNRESOLVED, A2), surfaced for review |
+| XRPL wallet ↔ CEX transfer (same asset, no price) | linked `TRANSFER_OUT` + `TRANSFER_IN` pair (matching asset/qty/ts, shared `transfer_id` in provenance) — never a `TRADE` |
+| any fill with `fee > 0` | standalone `FEE` (`fee_asset`, `fee_quantity=fee`) |
+
+`event_id = varde:{run_id}:{trade_id}:{leg}` (TRADE = leg 0, FEE = leg 1).
+`source_id = varde-fills:{book}` (e.g. `varde-fills:lab`). `source_row_index` from the
+stable sort `(exchange_ts, trade_id, leg)`.
+
+#### Worked example: HP-VARDE-001 — Firi BTC/NOK spot buy (the HP-1 fixture)
+
+**Input** — the byte-pinned VARDE fixture `fixtures/export/hp1_nok_spot_buy.csv` (one
+row): `firi`, `BTC/NOK`, `spot`, `buy`, `qty=0.05000000`, `price=600000.00000000`,
+`fee=150.00000000`, `fee_asset=NOK`, `fill_kind=taker`,
+`fx_usdnok_at_fill={"rate":"10.7421","source":"norgesbank.eod","as_of_ts":"2026-03-02T00:00:00Z"}`,
+`order_id=varde-ord-1`, `trade_id=varde-1`, `strategy_id=dca_v1`, `book=lab`,
+`mode=live`, `run_id=varde-run-2026-03-02`, `exchange_ts=2026-03-02T10:15:30Z`.
+
+**Output — exactly two `CanonicalEvent` rows.** NOK is home fiat, so the Taxes core
+will treat the NOK out-leg as a non-taxable home-fiat movement — but the event is still
+a structurally-valid bilateral `TRADE`; the adapter does not pre-decide that, it emits
+the full swap and lets the core rule (A4).
+
+**Event 0 — TRADE**
+```
+event_id:          varde:varde-run-2026-03-02:varde-1:0
+timestamp:         2026-03-02T10:15:30Z          # tz-aware, from exchange_ts; Oslo reporting downstream
+event_type:        TRADE
+asset_out:         NOK
+quantity_out:      30000.00000000                # qty × price = 0.05 × 600000
+asset_in:          BTC
+quantity_in:       0.05000000
+nok_value_out:     30000.00                       # advisory (quote=NOK → notional direct)
+nok_value_in:      30000.00
+source_id:         varde-fills:lab
+source_row_index:  0                              # stable sort (exchange_ts, trade_id, leg)
+provenance:        {parser: "varde_adapter", parser_version: "varde/1→event/1",
+                    source_type: "varde-fills", source_ref: "varde-fills.csv#varde-1",
+                    producer: "varde", strategy_id: "dca_v1", order_id: "varde-ord-1",
+                    trade_id: "varde-1", venue: "firi", instrument: "BTC/NOK", side: "buy",
+                    mode: "live", book: "lab", run_id: "varde-run-2026-03-02",
+                    fx_usdnok_at_fill: {rate:"10.7421", source:"norgesbank.eod", as_of_ts:"2026-03-02T00:00:00Z"},
+                    raw_row: {…verbatim varde-fills row}}
+```
+
+**Event 1 — FEE**
+```
+event_id:          varde:varde-run-2026-03-02:varde-1:1
+timestamp:         2026-03-02T10:15:30Z
+event_type:        FEE
+fee_asset:         NOK
+fee_quantity:      150.00000000
+nok_value_out:     150.00                         # advisory; fee already in home fiat NOK
+source_id:         varde-fills:lab
+source_row_index:  1
+provenance:        {… same chain as Event 0, leg: 1 …}
+```
+
+The four required provenance keys (`parser`, `parser_version`, `source_type`,
+`source_ref`) are mandatory on every event (`event.py` `_validate_provenance`); the
+richer dict is the adapter's additional provenance. Quantities are positive (A7);
+`event.py` enforces the `TRADE` (both legs) and standalone-`FEE` (no legs) shapes at
+construction.
+
+> **Deliberately differs from §7 HP-1.** §7 emits a single-sided `ACQUISITION` for the
+> fiat buy; the real `CanonicalEvent` has **no** `ACQUISITION` type, and
+> `_validate_shape` rejects a one-sided "in" that isn't `TRANSFER_IN/GIFT_IN/INCOME`.
+> The faithful representation of a purchase is a `TRADE` with home-fiat on the out-leg.
+> HP-VARDE-001 is the first worked example written natively in the bilateral target
+> shape; §7 aligns when the doc-wide reconciliation lands.
+
+---
+
 ## 4. Determinism & idempotency (A5)
 
 - `event_id` is a pure function of upstream identifiers (`run_id`, `trade_id`,
