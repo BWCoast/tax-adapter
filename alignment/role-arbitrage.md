@@ -48,6 +48,10 @@ Canonical fills (or a conforming export) with: side/price/size/asset/ts, fee +
 fee_asset, FX `{rate, source, as_of_ts}` captured at fill time, provenance
 chain, and structurally-identical sim/paper/live rows.
 
+## Onboarding & lint
+Follow the hub's `ONBOARDING-PRODUCER.md` and keep `tools/producers.json` + this
+producer's golden fixture green (`Trading Alignment/tools/check_producer_alignment.py`).
+
 ## How to request a contract change
 Propose additive changes to the **Tax Adapter** alignment folder (for the export
 shape) or the **Trading** session (if you write the shared `trade_ledger`).

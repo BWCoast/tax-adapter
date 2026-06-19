@@ -49,6 +49,11 @@ not an adapter hack (A2 / GOTCHAS 10).
   `qty/price/fee` strings in provenance (not just the parsed `Decimal`) for
   audit tie-out.
 
+## Lint awareness
+Make sure each producer's mapping is registered in `SCHEMAS.md §3.x` so the hub's
+producer-alignment lint (`Trading Alignment/tools/check_producer_alignment.py`) has
+a canonical mapping to compare against.
+
 ## How to request a contract change
 - Need the Event contract changed → propose an additive change to the **Taxes**
   session; record the request here.

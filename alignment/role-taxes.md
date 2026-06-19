@@ -47,6 +47,11 @@ the requirements** every other session satisfies.
 - **A6 — baseline step-up guard**: if any `inngangsverdi` baseline date ever
   applies, FIFO must refuse to compute basis on pre-baseline lots (loud).
 
+## Lint awareness
+You own the Event contract that the hub's `tools/check_producer_alignment.py`
+ultimately validates producers against — it checks each producer's `event_id`
+prefix is registered in `CONTRACTS.md`, mirroring your `ADR-0001-addendum` registry.
+
 ## How to request a contract change
 You are the owner of the Event contract — ratify additive changes in *your*
 ADRs, then note it back here. For producer/adapter changes you need, file the

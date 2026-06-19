@@ -61,6 +61,10 @@ lab. You own `trade_ledger` and the engines that write it. You are the primary
   halt split, clock-skew halt, watchdog supervision, idempotent orders) — gated
   on a validated strategy (ADR-003). Reference, not now.
 
+## Onboarding & lint
+Follow the hub's `ONBOARDING-PRODUCER.md` and keep `tools/producers.json` + this
+producer's golden fixture green (`Trading Alignment/tools/check_producer_alignment.py`).
+
 ## How to request a contract change
 You own `trade_ledger` — ratify additive bumps in your own ADRs. For Event/tax
 needs, file the request to the Tax Adapter alignment folder.

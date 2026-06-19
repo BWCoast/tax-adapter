@@ -9,11 +9,14 @@
 
 ## Status
 
-**Planned producer — built out but not yet wired into the Taxes pipeline.**
-VARDE is a running system (127 tests, FastAPI + SQLite, Windows desktop app).
-The three OPEN questions below are now settled; the export schema gaps are
-OPEN additive bumps (see §OPEN items). VARDE does not yet emit any export the
-adapter reads.
+**Producer built — export pipeline implemented, not yet wired into a live adapter run.**
+VARDE is a running system (FastAPI + SQLite, Windows desktop app; 161 tests).
+As of 2026-05-12 the export pipeline is BUILT: the Trade model carries all
+adapter-required fields as A5 Decimal strings, `scripts/export_fills.py` produces
+the append-only `db-backup/varde-fills.csv`, and the HP-1 golden fixture exists
+and is drift-guarded against the live exporter. All three OPEN questions are now
+settled and the schema bumps are implemented (see §OPEN items). What remains is
+the adapter ingesting `varde-fills.csv` end-to-end (adapter-side work).
 
 ## VARDE's distinct purpose (settled 2026-05-12)
 
@@ -85,12 +88,19 @@ additive schema bump and requires a new OPEN item.
 - Don't embed allocation logic (tax-reserve routing, capital-bucket splits)
   in the export. The capital router is internal to VARDE.
 
-## Export schema gaps — OPEN additive bumps
+## Export schema gaps — IMPLEMENTED 2026-05-12
 
-VARDE's current `Trade` model (`apps/api/models.py`) covers:
-`id, user_id, exchange, symbol, side, qty, price, fee, ts, pnl, status`
+> All fields in the table below have been ADDED to the `Trade` model
+> (`apps/api/models.py`) and are surfaced by `scripts/export_fills.py`. The table
+> is retained as the rationale record. `decision_id` / `git_commit` were NOT added
+> (deferred — not required for HP-1; `strategy_id`/`run_id` cover provenance for now).
 
-Fields the adapter requires that VARDE's `Trade` table currently lacks:
+VARDE's `Trade` model now covers:
+`id, user_id, exchange, symbol, side, qty, price, fee, ts, pnl, status, fee_asset,
+fill_kind, product_type, fx_usdnok_at_fill, order_id, trade_id, strategy_id, book,
+mode, run_id`
+
+Fields the adapter required that VARDE's `Trade` table previously lacked (now added):
 
 | Missing field | Needed for | Priority |
 |---|---|---|
@@ -113,27 +123,48 @@ VARDE spot trades).
 ## OPEN items
 
 ```
-SETTLED: VARDE export transport (2026-05-12)
+SETTLED + IMPLEMENTED: VARDE export transport (decided 2026-05-12, built 2026-05-12)
   decision:        CSV drop — VARDE writes varde-fills.csv to db-backup/ alongside
                    varde.db. Synology Drive picks both up. Adapter reads CSV; never
                    reads varde.db directly. Rows are appended only; no in-place
-                   mutation of historical rows. Sort key: (exchange_ts, trade_id).
-  target_doc:      VARDE scripts/export-fills.py + adapter SOURCES.md (pending)
+                   mutation of historical rows.
+  ordering:        PHYSICAL file order is append order by source_row_id (= Trade.id,
+                   monotonic, the deterministic dedup key — export resumes from
+                   max(source_row_id) already in the file). The adapter applies the
+                   CANONICAL sort (exchange_ts, trade_id) on its own side; it must not
+                   assume physical row order equals canonical order.
+  implementation:  VARDE scripts/export_fills.py — stdlib-only (sqlite3+csv), 23-col
+                   COLUMNS contract, append-only, UTF-8, verbatim period-decimal
+                   qty/price/fee, blank-for-missing (never 0), realized_pnl_quote="0"
+                   (spot), pnl NOT exported, schema_version="varde/1". Tolerates a
+                   pre-migration DB (PRAGMA-gated optional columns).
+  target_doc:      VARDE scripts/export_fills.py + adapter SOURCES.md (pending)
 
-OPEN: VARDE Trade model schema bumps
-  owner:           VARDE (implement additive columns)
-  blocking_for:    producing a contract-faithful export row
-  decision_needed: add fee_asset, fill_kind, product_type, fx_usdnok_at_fill,
-                   order_id, trade_id to Trade model; maintain backward compat
-                   for existing rows (nullable, filled on new fills only)
-  target_doc:      VARDE apps/api/models.py + a VARDE CHANGELOG or ADR
+IMPLEMENTED: VARDE Trade model schema bumps (2026-05-12)
+  owner:           VARDE (implemented)
+  was_blocking:    producing a contract-faithful export row
+  done:            apps/api/models.py — qty/price/fee migrated Float→Text (A5 verbatim
+                   Decimal strings); added 10 nullable Text columns: fee_asset,
+                   fill_kind, product_type, fx_usdnok_at_fill, order_id, trade_id,
+                   strategy_id, book, mode, run_id. apps/api/database.py —
+                   _migrate_trade_schema(engine) (two-phase: REAL→TEXT rename+recreate
+                   preserving NULLs; ALTER ADD COLUMN for missing cols), wired into
+                   init_db(); idempotent across all 4 DB states. Backward-compatible:
+                   new cols nullable, filled on new fills only.
+  target_doc:      VARDE apps/api/models.py + apps/api/database.py
 
-OPEN: VARDE HP-1 fixture
-  owner:           VARDE (produce) + Tax Adapter (confirm contract-faithful)
-  blocking_for:    adapter building its first VARDE golden fixture
-  decision_needed: one schema-faithful NOK-quoted spot BUY row (like SCHEMAS §7
-                   HP-1 but from VARDE's export, not Trading lab's trade_ledger)
+IMPLEMENTED: VARDE HP-1 fixture (2026-05-12)
+  owner:           VARDE (produced) — Tax Adapter still to confirm contract-faithful
+  was_blocking:    adapter building its first VARDE golden fixture
+  done:            fixtures/export/hp1_nok_spot_buy.csv — one Firi BTC/NOK spot BUY
+                   (qty 0.05, price 600000, fee 150 NOK), generated by the real
+                   export_fills then frozen (fixed run_id/generated_at). Header is
+                   drift-guarded == export_fills.COLUMNS; a consistency test re-runs
+                   the live exporter and compares every column except the two
+                   clock-derived provenance fields. nok_value intentionally absent
+                   (adapter computes 0.05 x 600000 = 30000.00 NOK).
   target_doc:      VARDE fixtures/export/hp1_nok_spot_buy.csv
+                   + tests/fixtures/test_hp1_fixture.py
 ```
 
 ## SovereignForge takeaways tagged to you
@@ -148,6 +179,10 @@ Inherit ecosystem invariants (§7). Priority for VARDE:
 - **A5 verbatim decimal strings**: `Trade.qty/price/fee` are currently `Float` —
   they must become `Text` (Decimal strings) before export. A schema migration is
   needed (same pattern as `CapitalAccount.balance` which already uses `Text`).
+
+## Onboarding & lint
+Follow the hub's `ONBOARDING-PRODUCER.md` and keep `tools/producers.json` + this
+producer's golden fixture green (`Trading Alignment/tools/check_producer_alignment.py`).
 
 ## How to request a contract change
 

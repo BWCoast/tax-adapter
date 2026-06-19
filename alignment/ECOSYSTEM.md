@@ -84,7 +84,8 @@ it. A stale alignment doc is a bug, not an authority.
 | **Prediction-Market algo (Kalshi)** | `Documents/PM algo` | Producer. Standalone bot; conforms to the adapter's export contract. |
 | **Arbitrage Bot** | *repo path TBD* | **First-class planned producer** — not yet built / not yet feeding the pipeline. First-class in the topology now (not a generic future system). |
 | **VARDE** | *repo path TBD* | **First-class planned producer** (another bot) — not yet built / not yet feeding the pipeline. First-class now, specifics OPEN. |
-| **Capital router / dashboards / pnl-service** | *future* | Consumers. Downstream of realized PnL and tax Events. |
+| **Capital Router** (stage) | shared `capital-router-lib`, per-bot | **Decided 2026-06-18 (Norway-only):** a shared `capital-router-lib` applying a flat **25% holdback on realized profit (22% tax + 3% fee buffer)**, implemented per-bot and emitting a linked `TRANSFER_OUT`/`TRANSFER_IN` into a `tax-reserve` book; losses hold back nothing. Owning doc: `Trading Alignment/CAPITAL_ROUTER.md` (ADR-003). |
+| **Dashboards / pnl-service** | *future* | Consumers. Downstream of realized PnL and tax Events. |
 
 > **Note (superseded 2026-06-14):** an earlier framing called `SovereignForgeV1`
 > "platform context only — not a contract dependency." That framing reflected the
@@ -196,8 +197,8 @@ OPEN: <short title>
 
 > **Authoritative tracker (2026-06-18):** cross-cutting OPEN items now live in
 > `Trading Alignment/GAPS.md` (OPEN-1…OPEN-13). The items below are the adapter's
-> local mirror — where they differ, GAPS.md wins. Status deltas found in the
-> 2026-06-18 cross-repo read: the HP-1 fixture row now exists upstream
+> local mirror (hub OPEN-1…OPEN-14) — where they differ, GAPS.md wins. Status
+> deltas found in the 2026-06-18 cross-repo read: the HP-1 fixture row now exists upstream
 > (`Trading/fixtures/trade_ledger/hp1_spot_buy.csv`, matches SCHEMAS §7); transport
 > format is a deterministic CSV exporter (Trading ADR-007), mechanism still open
 > (GAPS OPEN-3); the `event_id` registry is formalized and Taxes-owned (Trading
@@ -239,22 +240,32 @@ OPEN: Arbitrage Bot wiring
                    that stress the load-bearing rules; repo path
   target_doc:      alignment/role-arbitrage.md + adapter SCHEMAS.md
 
-OPEN: VARDE export transport
-  owner:           VARDE (decide) + Tax Adapter (confirm readable)
-  blocking_for:    VARDE feeding the pipeline; VARDE HP-1 fixture
-  decision_needed: file-based transport (CSV drop, SQLite snapshot, or Parquet);
-                   must be read-only from adapter view, append-only, deterministic.
+SETTLED + IMPLEMENTED: VARDE export transport (2026-05-12)
+  decision:        CSV drop — VARDE writes append-only varde-fills.csv to db-backup/
+                   alongside varde.db; Synology Drive picks both up. Read-only from the
+                   adapter's view; deterministic. Physical order = append-by-source_row_id;
+                   adapter applies the canonical (exchange_ts, trade_id) sort itself.
+  implemented_in:  VARDE scripts/export_fills.py (stdlib-only, 23-col contract).
+  remaining:       adapter-side ingestion of varde-fills.csv (Tax Adapter to confirm
+                   readable + record in adapter SOURCES.md).
   target_doc:      alignment/role-varde.md + adapter SOURCES.md
-  note:            Purpose (Norwegian retail PM), export approach (standalone),
-                   and instrument types (spot, NOK+USDT-quoted + XRPL transfers)
-                   settled 2026-05-12 — see role-varde.md.
 
-OPEN: VARDE Trade model schema bumps
-  owner:           VARDE (implement)
-  blocking_for:    producing a contract-faithful export row
-  decision_needed: add fee_asset, fill_kind, product_type, fx_usdnok_at_fill,
-                   order_id, trade_id; migrate qty/price/fee Float→Text (Decimal)
-  target_doc:      VARDE apps/api/models.py
+IMPLEMENTED: VARDE Trade model schema bumps (2026-05-12)
+  owner:           VARDE (done)
+  was_blocking:    producing a contract-faithful export row
+  done:            added fee_asset, fill_kind, product_type, fx_usdnok_at_fill,
+                   order_id, trade_id, strategy_id, book, mode, run_id (all nullable);
+                   migrated qty/price/fee Float→Text (A5 Decimal strings) via
+                   _migrate_trade_schema in init_db (idempotent, NULL-preserving).
+  target_doc:      VARDE apps/api/models.py + apps/api/database.py
+
+OPEN: per-producer alignment-lint ratchet (hub OPEN-14)
+  owner:           stack-alignment (Trading Alignment) + each producer
+  blocking_for:    contract-drift prevention as producers go live on-contract
+  decision_needed: flip enforce=true per producer in Trading Alignment/
+                   tools/producers.json once it is live on-contract (lint checks
+                   export, capital-router-lib pin, golden fixture, event_id prefix)
+  target_doc:      Trading Alignment/tools/producers.json + ONBOARDING-PRODUCER.md
 
 FINDING: adapter SCHEMAS.md misrepresents the events.csv output contract
   owner:           Tax Adapter (record) → resolved by a dedicated build/P&L adapter (operator)

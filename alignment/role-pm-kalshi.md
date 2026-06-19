@@ -50,6 +50,10 @@ than inventing them.
 - **A3 — classification-defense** (ecosystem-wide): systematic automated PM
   trading also feeds the private-vs-business question — keep activity auditable.
 
+## Onboarding & lint
+Follow the hub's `ONBOARDING-PRODUCER.md` and keep `tools/producers.json` + this
+producer's golden fixture green (`Trading Alignment/tools/check_producer_alignment.py`).
+
 ## How to request a contract change
 The export contract lives in the adapter's `SCHEMAS.md`. Propose additive
 changes to the **Tax Adapter** alignment folder; the adapter ratifies.

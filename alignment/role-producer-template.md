@@ -52,6 +52,10 @@ Inherit all ecosystem invariants. Once trading is systematic, **A3
 classification-defense**: keep activity dated, signed, and auditable from the
 first fill.
 
+## Onboarding & lint
+Follow the hub's `ONBOARDING-PRODUCER.md` and keep `tools/producers.json` + this
+producer's golden fixture green (`Trading Alignment/tools/check_producer_alignment.py`).
+
 ## How to request a contract change
 Propose additive changes to the **Tax Adapter** alignment folder (export shape)
 or the **Trading** session (shared `trade_ledger`). Mark unsettled fields OPEN
