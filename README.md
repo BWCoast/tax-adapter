@@ -25,11 +25,12 @@ event model) was written to forbid.
 So: **many producers, one canonical ledger, one adapter, one tax intake.**
 
 ```
-  trading lab (trade_ledger)  ─┐
-  prediction-market bot        ─┤
-  DCA / accrual buys           ─┼──►  tax-adapter  ──►  Taxes/ (events.csv intake)
-  capital-router transfers     ─┤      (this repo)        → FIFO (NO) / S104 (UK)
-  exchange CSVs (manual)       ─┘                         → RF-1159 / UK CGT
+  VARDE (varde-fills.csv)  ✅ implemented (NOK spot buy) ─┐
+  trading lab (trade_ledger)        spec only             ─┤
+  SovereignForge (trade_ledger v3)  spec only, PROPOSED   ─┤
+  prediction-market bot (PM algo)   spec only             ─┼──►  tax-adapter  ──►  Taxes/ (events.csv intake)
+  arb-bot (own tax_export.csv)      registered, spec only ─┤      (this repo)        → FIFO (NO) / S104 (UK)
+  capital-router transfers          spec only             ─┘                         → RF-1159 / UK CGT
 ```
 
 ## What it is NOT (scope fence — see [decisions/ADR-001](decisions/ADR-001-adapter-scope-boundary.md))
@@ -50,11 +51,15 @@ one row per fill, sim/paper/live structurally identical, tagged `book`
 `realized_pnl_quote`, `fx_usdnok_at_fill` (captured at fill time), and the
 `decision_id → order → intent → experiment_hash` provenance chain.
 
-**Output — canonical tax `Event`** (Taxes `ADR-0001`): the 20-column
-`events.csv` intake — `event_id, timestamp, event_type, asset, quantity,
-nok_value, source_id, source_row_index, provenance` — jurisdiction-agnostic,
-`Decimal`-safe, with `event_type ∈ {DISPOSAL, ACQUISITION, INCOME, FEE,
-TRANSFER_IN, TRANSFER_OUT, SWAP, REQUIRES_REVIEW}`.
+**Output — canonical tax `Event`** (Taxes `ADR-0001`, `CanonicalEvent`): the
+**bilateral** 20-column `events.csv` intake — `event_id, timestamp, event_type,
+source_id, source_row_index, asset_out, quantity_out, asset_in, quantity_in,
+fee_asset, fee_quantity, income_subtype, label, notes, nok_value_out,
+nok_value_in, parser, parser_version, source_type, source_ref` —
+jurisdiction-agnostic, `Decimal`-safe, with `event_type ∈ {TRADE, TRANSFER_IN,
+TRANSFER_OUT, INCOME, FEE, GIFT_IN, GIFT_OUT, REQUIRES_REVIEW}`. A spot buy or
+sell is one **`TRADE`** (both legs) plus a standalone **`FEE`**;
+`ACQUISITION`/`DISPOSAL`/`SWAP` are **not** event types (ADR-004).
 
 The full field-by-field mapping (including the load-bearing cases —
 derivatives realized-PnL, funding, internal book transfers, prediction-market
@@ -70,21 +75,62 @@ adapter (A4), deterministic + idempotent `event_id`s stable across re-imports
 
 ## Status
 
-**Scoping stage.** Contracts on both sides are read and pinned; the mapping
-spec and scope fence are written. Nothing implemented yet — by design, the
-adapter is built only once there are live `trade_ledger` rows to translate
-(Trading's lab is pre-edge; see Trading `PROGRESS.md`). See
-[PROGRESS.md](PROGRESS.md) for the devlog, [SOURCES.md](SOURCES.md) for where
-the upstream/downstream contracts live, and
-[decisions/](decisions/) for the frozen scope.
+> Last verified: **2026-09-29** · Verify-by: **2026-12-29**, or the next
+> producer mapper landing, whichever is first.
+
+**First executable slice landed** (`d89ccb1`, 2026-06-20; ADR-004). Counts, not
+adjectives — verified 2026-09-29 with `uv run pytest`: **28 passed, 0 skipped**
+(`test_events_shape` 17, `test_varde_hp1` 7, `test_cli` 2, `test_events_columns` 1,
+`test_events_conformance` 1 — the last runs against the real Taxes `CanonicalEvent`
+when Taxes is importable at its local path and skips otherwise).
+
+| Area | State |
+|---|---|
+| VARDE NOK-quoted spot **buy** → `TRADE` + `FEE` | ✅ implemented, golden-pinned, byte-identical on re-run |
+| VARDE sell / stablecoin-quoted / XRPL transfers | ❌ spec only — mapper raises `NotImplementedError` (fail-closed) |
+| Trading `trade_ledger` mapper (HP-1) | ❌ spec only (`SCHEMAS.md §7`); input fixture exists in `Trading`, transport still open |
+| SovereignForge / PM algo / arb-bot mappers | ❌ spec only |
+| Counted-skip ledger, `REQUIRES_REVIEW` routing, canonical `source_row_index` sort | ❌ not built — see the known-gaps list in `SCHEMAS.md §3.7` |
+
+**One mapping is implemented; everything else in `SCHEMAS.md` is specification.**
+The docs now say so at the point of each claim.
+
+### Quick start
+
+```bash
+uv sync                                   # dev deps (pytest)
+uv run pytest                             # 28 tests
+PYTHONPATH=src uv run python -m tax_adapter.cli \
+  --producer varde --in tests/fixtures/varde/hp1_nok_spot_buy.csv --out events.csv
+```
+
+`PYTHONPATH=src` is **required** for the CLI (the project has no build-system, so
+`tax_adapter` is not installed; pytest gets the path from `pyproject.toml`). Layout:
+`src/tax_adapter/events.py` (frozen `Event` + shape validation + CSV writer),
+`producers/varde.py` (mapper), `cli.py` (`--producer` registry).
+
+See [PROGRESS.md](PROGRESS.md) for the devlog, [SOURCES.md](SOURCES.md) for where
+the upstream/downstream contracts live, [HANDOFF.md](HANDOFF.md) for where to pick
+up, and [decisions/](decisions/) for the binding scope (ADR-001…004).
+
+## Where this sits in the stack
+
+The stack-wide map lives in **`Documents/Trading Alignment`** (topology, frozen
+seams, `event_id` registry, cross-cutting OPEN items, the producer-alignment lint).
+This repo's [`alignment/`](alignment/) folder is narrowed to the adapter's role cards
+and producer-coordination notes and defers to the hub where they overlap
+(`alignment/ECOSYSTEM.md §0`).
 
 ## Related repos (read-only references)
 
 | Repo | Role | Path |
 |---|---|---|
 | `Taxes` | Tax authority of record; owns the canonical Event contract & tax core | `Documents/Taxes` |
-| `Trading` | Lab/accrual engines; owns `trade_ledger`, intent, order contracts | `Documents/Trading` |
-| `PM algo` | Standalone prediction-market bot; exports fills/PnL to the adapter | `Documents/PM algo` |
-| `SovereignForgeV1` | Broader platform context | `Documents/SovereignForgeV1` |
+| `Trading` | MM research lab; owns `trade_ledger` v3 + the HP-1 fixture (pre-edge, no live rows) | `Documents/Trading` |
+| `Offshore trading` (VARDE) | Facts-only producer; the only one with an implemented mapper here | `Documents/Offshore trading` |
+| `PM algo` | Standalone Kalshi bot; export contract defined here (`SCHEMAS §3.4`), unbuilt | `Documents/PM algo` |
+| `arb-bot` | Registered producer with its own `tax_export.csv` (hub ADR-005); unbuilt here | `Documents/arb-bot` |
+| `SovereignForgeV1` | Norway-fork producer (PROPOSED); also methodology reference | `Documents/SovereignForgeV1` |
+| `Trading Alignment` | Stack-wide alignment hub (no code) | `Documents/Trading Alignment` |
 
 See [SOURCES.md](SOURCES.md) for the exact files and what each owns.

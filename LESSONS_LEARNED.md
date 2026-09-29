@@ -59,4 +59,34 @@ Trading's distillation). Grows as the adapter is built.
 
 ## From building the adapter
 
-_(empty — populated as the adapter is implemented and meets real ledger data)_
+Earned in the first slice (VARDE NOK spot buy, `d89ccb1`; verified 2026-09-29,
+28 tests passing). Each is tied to evidence in the repo, not to anticipation.
+
+15. **Verify the output shape against the owner's *code*, not its docs — or our own.**
+    Our `SCHEMAS.md` (and the stack hub's worked examples) described a single-sided
+    `ACQUISITION` row that Taxes' `CanonicalEvent` rejects at construction. It was
+    caught only because someone read `event.py` (ADR-004). A spec that has never been
+    run against the consumer is a hypothesis.
+16. **Mirror the contract, don't import the consumer — and prove the mirror.** The
+    adapter carries its own `Event.validate()` and a column-drift test, and a
+    skip-if-unavailable conformance test that constructs the *real* `CanonicalEvent`.
+    That keeps the read-only repo boundary while still catching drift (ADR-004 §3).
+17. **Fail closed on the unmapped, loudly.** Unimplemented shapes raise
+    `NotImplementedError` rather than guessing (pinned by the `…sell_and_stablecoin…`
+    test in `tests/test_varde_hp1.py`). Better a stopped run than a plausible wrong
+    tax row (A3).
+18. **A golden fixture is only as good as the *second* run.** The HP-1 output is
+    pinned byte-for-byte and a re-run is asserted byte-identical, which is what makes
+    "deterministic" a tested claim (A5) instead of a slogan.
+19. **Probe the edges before writing "the code does X".** Reading the mapper said it
+    handled fees; running it showed a zero fee still emits a `FEE`, a blank fee
+    crashes with a bare `InvalidOperation`, and rows are indexed in input order. Docs
+    written from a read alone would have overstated v1 (M1/M2/M4).
+20. **Re-verify upstream state on the day you cite it.** Between two reads the hub
+    closed OPEN-1, Taxes ratified prefixes — and ratified `pm-algo:` as a
+    `provenance.algo` label, *not* an `event_id` prefix, contradicting both our docs
+    and the hub's. Carrying a months-old "pending" forward would have baked in a
+    second wrong claim.
+21. **One doc must say which parts are real.** Spec and implementation drift apart
+    fast in a docs-first repo; the fix is a status banner at each claim (implemented
+    vs spec-only, with a verified date), not a global "in progress".

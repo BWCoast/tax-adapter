@@ -7,12 +7,15 @@
 > fee, funding, transfer, settlement, or book semantics, do not redefine them
 > locally — propose an additive change back to the Tax Adapter alignment folder.
 
-> **You are first.** Per [`ADR-003`](../decisions/ADR-003-first-end-to-end-producer-mm-spot.md),
-> MM Strategy / Trading lab is the **first producer wired end-to-end**, because
-> `trade_ledger` is already a frozen contract. The first happy path is
-> **spot-only** (one fiat-quoted spot buy → `ACQUISITION` + `FEE`), pinned in
-> adapter [`SCHEMAS.md`](../SCHEMAS.md) §7. Your gating contribution: settle the
-> `trade_ledger → adapter` **transport** (ECOSYSTEM §8 OPEN item).
+> **You are next, not first (2026-09-29).** [`ADR-003`](../decisions/ADR-003-first-end-to-end-producer-mm-spot.md)
+> planned MM Strategy / Trading lab as the first producer wired end-to-end; in
+> practice VARDE's identical shape went first because it had real exported fills
+> and you are still pre-edge ([`ADR-004`](../decisions/ADR-004-varde-first-slice-and-bilateral-trade-output.md)).
+> Your HP-1 stays the contract for the **next** mapper: one fiat-quoted spot buy →
+> one bilateral `TRADE` + `FEE` (not `ACQUISITION` — no such event type), pinned in
+> adapter [`SCHEMAS.md`](../SCHEMAS.md) §7. Done on your side: the transport
+> **format** (your ADR-007) and the `hp1_spot_buy.csv` fixture. Still open: live
+> transport mechanics, once live rows exist.
 
 ## Your lane
 *What happened (you produce it).* You are the market-making / funding strategy

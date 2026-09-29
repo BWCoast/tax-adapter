@@ -1,7 +1,10 @@
 # ADR-003 — First end-to-end producer is MM Strategy Bot; first happy path is spot-only
 
 Date: 2026-06-14 · Status: accepted (sequencing decision; supersede with a new
-ADR to change the order)
+ADR to change the order) — **amended by [ADR-004](ADR-004-varde-first-slice-and-bilateral-trade-output.md)
+(2026-09-29):** the first *executable* slice was VARDE's identical shape, MM/Trading
+HP-1 is now the next mapper; and `ACQUISITION` below reads as one bilateral `TRADE`
+(no such `event_type` exists in Taxes). Body kept as the original record.
 
 ## Context
 Implementation is gated on live `trade_ledger` rows (the lab is pre-edge, see

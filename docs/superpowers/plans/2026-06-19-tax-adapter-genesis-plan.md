@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax. Design: `docs/superpowers/specs/2026-06-19-tax-adapter-genesis-design.md`.
 
+**Status (2026-09-29):** **Executed** in `d89ccb1` (2026-06-20); 28 tests pass. The
+checkboxes below were not ticked as work landed and are not a record of progress —
+`PROGRESS.md` / ADR-004 are. The "No commits" rule below applied to that run only.
+
 **Goal:** Bootstrap the Tax Adapter's first code — map one VARDE `varde-fills.csv` row into the correct canonical `events.csv` rows (TRADE + FEE), validated against `event.py`'s shape rules and pinned by a golden HP-1 fixture.
 
 **Architecture:** A tiny `uv` package. Producer facts → an internal frozen `Event` dataclass that mirrors the frozen 20-column `events.csv` contract AND replicates `event.py`'s construction-time invariants (fail-fast) → serialize to `events.csv`. No runtime import of the Taxes package (the seam is the CSV contract); an optional skip-if-unavailable conformance test proves CSV-compliance against the real `CanonicalEvent` when Taxes is present locally.

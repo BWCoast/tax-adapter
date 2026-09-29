@@ -11,9 +11,12 @@ reporting layer.
 One-sentence boundary: *adapter = what happened; tax core = what it meant;
 capital router = what to do with the money.*
 
-**Status:** Scoping. Contracts on both sides are pinned; mapping spec + scope
-fence written. Implementation is gated on live `trade_ledger` rows (the lab is
-pre-edge). See `PROGRESS.md`.
+**Status (verified 2026-09-29):** first slice implemented — **one** mapping (VARDE
+NOK-quoted spot buy → `TRADE` + `FEE`), `uv run pytest` = 28 passed, 0 skipped.
+Everything else in `SCHEMAS.md` is spec only; the trade_ledger mapper waits on
+Trading's live transport. Output is the **bilateral** `events.csv` (`TRADE`, not
+`ACQUISITION`/`SWAP` — ADR-004). Known v1 gaps: `SCHEMAS.md §3.7`. Where to pick up:
+`HANDOFF.md`. Stack map: `Documents/Trading Alignment`. Verify-by: 2026-12-29.
 
 ---
 
@@ -44,7 +47,10 @@ Full list: `LAWS.md` (A1–A10). The mapping is `SCHEMAS.md`.
    deterministic `Taxes/` core (their Rule 1). The adapter emits typed events;
    the core classifies and computes.
 2. **Docs are source of truth.** If code conflicts with `SCHEMAS.md` / an ADR,
-   the code is wrong.
+   the code is wrong — *except* that an owning contract (Taxes' `event.py`,
+   Trading's `trade_ledger`) outranks this repo's docs (`alignment/ECOSYSTEM.md §3`);
+   `SCHEMAS.md` itself was once wrong that way (ADR-004). Label any spec-vs-code gap
+   at the claim, with a verified date.
 3. **Don't widen scope silently.** If a task seems to need allocation,
    reporting, or tax logic, stop — it belongs in another module (ADR-001).
 4. **The adapter consumes contracts it doesn't own.** Propose additive changes
@@ -70,10 +76,17 @@ Full list: `LAWS.md` (A1–A10). The mapping is `SCHEMAS.md`.
 
 ## Reference repos (read-only)
 
-- `C:\Users\mrkro\Documents\Taxes` — tax core + canonical Event (ADR-0001…0030)
-- `C:\Users\mrkro\Documents\Trading` — `trade_ledger` (ADR-005/006), LAWS L17/L20
+- `C:\Users\mrkro\Documents\Trading Alignment` — **stack-wide hub** (topology, seams,
+  `event_id` registry mirror, OPEN items, producer-alignment lint); it wins over this
+  repo's `alignment/` where they overlap
+- `C:\Users\mrkro\Documents\Taxes` — tax core + canonical Event
+  (`src/tax_core/models/event.py`, ADR-0001 + addenda)
+- `C:\Users\mrkro\Documents\Trading` — `trade_ledger` v3 (ADR-005/006/007), HP-1 fixture
+- `C:\Users\mrkro\Documents\Offshore trading` — VARDE (the one implemented producer)
 - `C:\Users\mrkro\Documents\PM algo` — prediction-market bot (exports back)
-- `C:\Users\mrkro\Documents\SovereignForgeV1` — platform/module-map context
+- `C:\Users\mrkro\Documents\arb-bot` — registered producer (own `tax_export.csv`)
+- `C:\Users\mrkro\Documents\SovereignForgeV1` — Norway-fork producer (PROPOSED) +
+  methodology reference
 
 See `SOURCES.md` for the file-level map of what each owns and what's reusable.
 
@@ -87,9 +100,20 @@ See `SOURCES.md` for the file-level map of what each owns and what's reusable.
 4. **Verify** — translate a real (or schema-faithful) ledger and diff events.
 5. **Document** — update `PROGRESS.md`, and `SCHEMAS.md`/`LAWS.md` on changes.
 
-## Tech stack (intended, to match the ecosystem)
+## Tech stack (as built)
 
-- **Language:** Python 3.12+
-- **Math:** `Decimal` (never floats for money)
-- **Data:** `dataclasses`; canonical events out as the `Taxes/` 20-column CSV
-- **Tests:** pytest; golden fixtures pinned byte-identical (determinism gate)
+- **Language:** Python `>=3.11` (`pyproject.toml`; verified running on 3.14.3), `uv`
+- **Runtime deps:** none (stdlib + `Decimal`; never floats for money)
+- **Data:** frozen `dataclass` `Event` (`src/tax_adapter/events.py`) → the `Taxes/`
+  20-column bilateral CSV
+- **Tests:** pytest via `uv run pytest` (28); golden fixtures byte-identical
+
+## Commands
+
+```bash
+uv run pytest
+PYTHONPATH=src uv run python -m tax_adapter.cli --producer varde --in <fills.csv> --out <events.csv>
+```
+
+`PYTHONPATH=src` is required for the CLI (no build-system). `src/tax_adapter/`:
+`events.py`, `cli.py`, `producers/varde.py`. Tests + fixtures: `tests/`.

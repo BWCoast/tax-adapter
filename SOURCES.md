@@ -152,9 +152,14 @@ adapter + the Taxes core. VARDE's embedded capital router
 **not** flow into the export (CONTRACTS.md §4; deferred to OPEN-11). Additive contract
 changes flow back via the alignment folder.
 
-**Live-rows status:** VARDE produces real fills locally today; the facts export + HP-1
-fixture exist and are fixture-verified. Adapter-side ingestion (this §5 + SCHEMAS.md
-§3.7 + a mapper) is the remaining gate before VARDE feeds the pipeline end-to-end.
+**Live-rows status (verified 2026-09-29):** VARDE produces real fills locally; the
+facts export + HP-1 fixture exist and are fixture-verified. **The adapter-side mapper
+now exists** for the NOK-quoted spot buy (`src/tax_adapter/producers/varde.py`, vendored
+input `tests/fixtures/varde/hp1_nok_spot_buy.csv`, golden `hp1_expected_events.csv`;
+ADR-004). Remaining before VARDE feeds the pipeline end-to-end: sell, stablecoin-quoted
+and XRPL-transfer mappers, the canonical sort, and the known v1 gaps in SCHEMAS.md
+§3.7. Taxes reserved `varde:` (ADR-0001 addendum 2026-07-13) as "not yet emitted" — it
+is emitted now.
 
 ## 6. Reusable patterns (extract, don't import)
 

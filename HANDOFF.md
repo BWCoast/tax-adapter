@@ -1,42 +1,56 @@
 # HANDOFF — for the next session
 
-Date: 2026-06-14 · From: scoping session · To: next tax-adapter session
+Date: 2026-09-29 · From: docs-reconciliation session · To: next tax-adapter session
+Last verified: 2026-09-29 · Verify-by: 2026-12-29
 
 ---
 
-## ⏭ Next sessions — pick up here (latest: 2026-06-14, alignment + HP-1 session)
+## ⏭ Pick up here (2026-09-29)
 
-Since the scoping handoff below, this session added the cross-session
-**alignment layer** and decided + specified the **first end-to-end path**.
-State is current; the ball is now in *other* repos, not this one.
+**State, with counts.** `master` was level with `origin/main` at `d89ccb1`
+(2026-06-20) before this docs pass. `uv run pytest` → **28 passed, 0 skipped**.
+**One mapping is implemented:** VARDE NOK-quoted spot buy → `TRADE` + `FEE`
+(`src/tax_adapter/producers/varde.py`, golden-pinned, byte-identical re-run).
+Everything else in `SCHEMAS.md` is specification and is labelled as such.
 
-**What's done (citeable):**
-- `alignment/` — canonical `ECOSYSTEM.md` (topology, ownership, binding
-  priority, anti-patterns, invariants, OPEN items, SovereignForge takeaways) +
-  per-session role cards + README paste-prompts. Hub-only; siblings read it
-  read-only.
-- **HP-1 decided** — `decisions/ADR-003`: MM Strategy / Trading lab is the first
-  producer wired; HP-1 = a fiat-quoted **spot-only** buy (→ `ACQUISITION` +
-  `FEE`); derivatives/swaps deferred to later happy paths.
-- **HP-1 specified** — `SCHEMAS.md §7`: concrete input row, the two exact Event
-  rows, determinism notes, first golden-fixture plan.
-- **Tracked + delegated** — `ECOSYSTEM.md §8` OPEN items (transport, HP-1
-  fixture, event_id prefixes) + `alignment/README.md` "Active task prompts —
-  HP-1 cycle" (Trading + Taxes blocks, retire-when-settled).
+**What changed since the 2026-06-14 handoff below** (read that as history):
+- **Code exists.** `src/tax_adapter/{events,cli}.py` + `producers/varde.py`, 5 test
+  files, VARDE HP-1 golden fixtures. Run: `uv run pytest`;
+  `PYTHONPATH=src uv run python -m tax_adapter.cli --producer varde --in … --out …`.
+- **ADR-004** — the first executable slice is VARDE (not MM as ADR-003 planned), and
+  the output contract is the real bilateral `TRADE` model. `SCHEMAS §1/§3.1/§7`
+  were reconciled to it; the events.csv FINDING is **resolved**.
+- **Stack hub** — `Documents/Trading Alignment` is the canonical stack map; this
+  repo's `alignment/` defers to it. Hub OPEN-1 (event_id prefixes) is **closed**
+  (Taxes ADR-0001 addendum 2026-07-13). Trading **ADR-007** settled the transport
+  *format* (CSV drop); live mechanics deferred until live rows exist.
+- The old stop-signal ("do NOT add more design until the producer + tax core
+  move") is **retired** — the producer and tax core moved.
 
-**Do NOT add more design in the adapter until the producer + tax core move.**
-The next actions live elsewhere:
-- **Next Trading session:** paste the generic MM block, then the HP-1 Trading
-  prompt (`alignment/README.md`) → choose/document transport + produce one
-  contract-faithful HP-1 `trade_ledger` fixture row.
-- **Next Taxes session:** paste the generic Taxes block, then the HP-1 Taxes
-  prompt → reserve `ledger:`/`pm-algo:` event_id prefixes (ADR-0001 addendum) +
-  confirm the §7 Event rows ingest (or return required-but-unpopulated columns).
+**Next actions, in priority order:**
+1. **Close the known v1 gaps** (`SCHEMAS §3.7`, list of 5) — golden fixture first
+   for each: canonical `(exchange_ts, trade_id, leg)` sort for `source_row_index`;
+   emit `FEE` only when `fee > 0`; blank `fee` → `REQUIRES_REVIEW` with a counted
+   reason instead of a bare `InvalidOperation`; the counted-skip ledger.
+2. **VARDE slice 2:** sell, stablecoin-quoted (needs `fx_usdnok_at_fill`; absent →
+   blank/UNRESOLVED), XRPL linked `TRANSFER_OUT`/`TRANSFER_IN` pair.
+3. **`trade_ledger` mapper** against `SCHEMAS §7` and Trading's
+   `fixtures/trade_ledger/hp1_spot_buy.csv`; pin `tests/fixtures/trade_ledger/…`.
+4. **Ask Taxes:** the PM-algo `event_id` prefix is unreserved (`pm-algo:` was
+   ratified only as a `provenance.algo` label) — blocks the PM mapper; and note that
+   `varde:` is now emitted (their addendum says "not yet emitted").
+5. **Ask the hub (Trading Alignment):** refresh `CONTRACTS.md` §3 (prefix status) and
+   worked examples A/B (still write `ACQUISITION`/`SWAP` as `event_type`); flip
+   OPEN-2/3 per Trading ADR-007.
+6. **Housekeeping:** `pyproject.toml` `tool.uv.dev-dependencies` is deprecated (uv
+   warns every run) → `dependency-groups.dev`; the conformance test hardcodes the
+   Taxes path `C:\Users\mrkro\Documents\Taxes\src` (skips on any other machine).
 
-**When they report back**, the adapter unblocks: build the `trade_ledger`→Event
-mapper for HP-1 (TDD, pin the §7 rows as the first golden fixture), then flip the
-relevant `ECOSYSTEM.md §8` OPEN items to settled. The live-rows gate still holds
-for anything beyond HP-1.
+---
+
+> **Everything below this line is the 2026-06-14 scoping handoff, kept as history.**
+> Where it says nothing is implemented, or lists prefixes / transport / the HP-1
+> fixture as open, the section above supersedes it.
 
 ---
 
@@ -60,8 +74,9 @@ live `trade_ledger` rows (the trading lab is pre-edge).
   folder** — it was the previous session's working directory and the OS held a
   lock on the directory itself; its contents were copied (verified identical)
   and emptied. Delete the empty husk if it lingers.
-- **Not a git repo yet.** Consider `git init` + a baseline commit early next
-  session (the sibling repos are all git-tracked).
+- ~~**Not a git repo yet.**~~ *(Historical — done 2026-06-14 (`b0b038a`). The repo
+  is tracked; `origin` = `https://github.com/BWCoast/tax-adapter`, branch
+  `master` → `origin/main`.)*
 - Start the next session with the working directory set to the new path.
 
 ## What exists (read these in order)

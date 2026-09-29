@@ -16,23 +16,51 @@ Two anchors, both read-only to this repo:
 - **Downstream:** canonical `Event` — Taxes `ADR-0001`, the 20-column
   `events.csv` intake.
 
+> **Implementation status — verified 2026-09-29 (`uv run pytest`: 28 passed, 0
+> skipped).** Exactly **one** mapping is implemented in code: **VARDE NOK-quoted
+> spot buy → `TRADE` + `FEE`** (§3.7, `src/tax_adapter/producers/varde.py`). Every
+> other row/section below is **specification only** — the mapper for it does not
+> exist yet. Known v1 gaps between this spec and the code are listed at the end of
+> §3.7 (M2: no silent landmines).
+
 ---
 
 ## 1. Downstream target — canonical tax Event (Taxes ADR-0001)
 
-Every emitted row MUST carry:
+> **Reconciled 2026-09-29 (ADR-004).** This section previously described a
+> single-sided `asset / quantity / nok_value` row with `event_type ∈ {DISPOSAL,
+> ACQUISITION, SWAP, …}`. That was wrong: Taxes `src/tax_core/models/event.py`
+> (`CanonicalEvent`) is **bilateral** and has **no** `ACQUISITION`/`DISPOSAL`/`SWAP`
+> type. The owning contract wins (ECOSYSTEM §3); this section now mirrors it.
 
-| field | req | notes |
+Every emitted row is the frozen **20-column `events.csv`** (header-name matched;
+Taxes `ADR-0001`, hub `CONTRACTS.md` Seam B). The adapter's `Event` dataclass
+(`src/tax_adapter/events.py`) mirrors it and re-checks the construction-time shape
+rules so a row Taxes would reject fails here first.
+
+| column(s) | req | notes |
 |---|---|---|
-| `event_id` | R | stable across re-imports, deterministic from source (A5). Format reserved here: `ledger:{run_id}:{trade_id}:{leg}` — verified NOT to collide with Taxes reserved prefixes (`inflow_group:`, `xrpl:`, `csv:`) per ADR-0001 addendum |
-| `timestamp` | R | ISO-8601 + tz; from ledger `exchange_ts` (UTC), reported Europe/Oslo downstream |
-| `event_type` | R | one of DISPOSAL, ACQUISITION, INCOME, FEE, TRANSFER_IN, TRANSFER_OUT, SWAP, REQUIRES_REVIEW |
-| `asset` | R | qualified key (Taxes ADR-0021): `XRP`/`BTC` native, `USDC.0x…` ERC-20, `USD.rIssuer` XRPL IOU, `NFT:…` |
-| `quantity` | R | `Decimal`, always positive (A7) |
-| `nok_value` | R/None | `None` = UNRESOLVED, NEVER fabricated (A2). The adapter passes through `fx_usdnok_at_fill` where the ledger captured it; it does not invent FX |
-| `source_id` | R | e.g. `trade_ledger:lab`, `trade_ledger:accrual`, `pm-algo:kalshi`, `csv:firi_2025.csv` |
-| `source_row_index` | R | deterministic tie-breaker — preserves FIFO ordering (Taxes ADR-0002) |
-| `provenance` | R | parser/adapter version, raw `decision_id`, `order_id`, `trade_id`, `experiment_hash`, `git_commit`, original ledger row |
+| `event_id` | R | deterministic from source ids (A5): `{prefix}{run_id}:{trade_id}:{leg}`. **Reserved by Taxes ADR-0001 addendum 2026-07-13 (Accepted):** `ledger:` (trade_ledger mapper, unbuilt), `varde:` (**emitted today** — Taxes' addendum still says "not yet emitted"), `arb:` (reserved, unbuilt). **`pm-algo:` is ratified only as a `provenance.algo` label, *not* an `event_id` prefix** — so a PM-algo mapper's `event_id` prefix is **unreserved (OPEN: Taxes + adapter)**; hub `CONTRACTS.md` §3 / Example C still show it as an `event_id` prefix. Registry of record: Taxes ADR-0001 addendum — never emit an unreserved prefix |
+| `timestamp` | R | tz-aware; from producer `exchange_ts` (UTC), serialized `…Z`. Europe/Oslo year bucketing is downstream (A1 / hub S10) |
+| `event_type` | R | one of `TRADE`, `TRANSFER_IN`, `TRANSFER_OUT`, `INCOME`, `FEE`, `GIFT_IN`, `GIFT_OUT`, `REQUIRES_REVIEW` |
+| `source_id`, `source_row_index` | R | e.g. `varde-fills:lab`; the index is the deterministic tie-breaker for FIFO (Taxes ADR-0002) |
+| `asset_out`, `quantity_out`, `asset_in`, `quantity_in` | per type | the two legs; `Decimal`, always ≥ 0, direction lives in the type (A7). Unused leg columns are blank. v1 emits bare symbols (`NOK`, `BTC`); qualified keys (`SYMBOL.contract`, Taxes ADR-0021) for tokens are not yet needed by any implemented mapping |
+| `fee_asset`, `fee_quantity` | per type | fee on any event, or the sole payload of a standalone `FEE` |
+| `income_subtype`, `label`, `notes` | opt | `notes` is **write-only** overflow metadata — no logic may parse it |
+| `nok_value_out`, `nok_value_in` | opt | advisory; blank = UNRESOLVED, **never fabricated** (A2). The adapter passes through what the producer captured; it does not invent FX |
+| `parser`, `parser_version`, `source_type`, `source_ref` | R | the four mandatory provenance keys (non-empty on every row) |
+
+**Shape rules** (enforced at construction by Taxes and mirrored in
+`Event.validate()`): `TRADE` ⇒ both legs · `TRANSFER_OUT`/`GIFT_OUT` ⇒ out-leg only ·
+`TRANSFER_IN`/`GIFT_IN`/`INCOME` ⇒ in-leg only · standalone `FEE` ⇒ fee fields only,
+no legs · `REQUIRES_REVIEW` ⇒ shape unconstrained.
+
+**Vocabulary.** "acquisition", "disposal" and "swap" survive in this repo's older
+prose only as descriptive shorthand for what a `TRADE` *means*. They are **not**
+valid `event_type` values; whenever they appear below, read them as resolving into
+`TRADE` / `TRANSFER_*` rows. The richer provenance (`decision_id`, `order_id`,
+`experiment_hash`, `git_commit`, raw row, …) is the adapter's additional dict, not
+`events.csv` columns.
 
 ---
 
@@ -69,21 +97,44 @@ its only tax-relevant output is realized PnL in the settle asset.
 
 ### 3.1 Spot fills (`product_type = spot`)
 
-A spot trade is two legs. The adapter emits per leg by what the quote asset is:
+A spot trade transfers ownership in both directions, so in the bilateral model
+(§1) **every** spot fill is one `TRADE` carrying both legs, plus a standalone
+`FEE`. The quote-asset distinction no longer changes the event *type* — it only
+changes whether `nok_value` needs FX:
 
-| ledger row | quote asset | emitted events |
-|---|---|---|
-| `side=buy` | fiat (NOK/EUR) | `ACQUISITION` of base |
-| `side=buy` | crypto/stablecoin | `SWAP` (disposal of quote + acquisition of base) — Norwegian tax treats stablecoin→crypto as a disposal |
-| `side=sell` | fiat | `DISPOSAL` of base |
-| `side=sell` | crypto/stablecoin | `SWAP` (disposal of base + acquisition of quote) |
-| any | — | `FEE` event for `fee`/`fee_asset` when fee > 0 |
+| ledger row | emitted events |
+|---|---|
+| `side=buy` | `TRADE` (`asset_out=quote`, `quantity_out=qty×price`; `asset_in=base`, `quantity_in=qty`) + `FEE` |
+| `side=sell` | `TRADE` (`asset_out=base`, `quantity_out=qty`; `asset_in=quote`, `quantity_in=qty×price`) + `FEE` |
+| quote = fiat (NOK) | `nok_value_out/in` = the NOK notional directly; no FX tier needed |
+| quote = crypto/stablecoin | `nok_value` needs `fx_usdnok_at_fill` `{rate, source, as_of_ts}`; if absent → blank/UNRESOLVED (A2), surfaced for review |
+| `fee > 0` | standalone `FEE` (`fee_asset`, `fee_quantity=fee`) |
+
+The Norwegian rule that a stablecoin-quoted buy is **not** a clean one-sided
+acquisition (GOTCHA 2) is preserved, not lost: the stablecoin disposal is the
+`asset_out` leg of the `TRADE`, and the Taxes core rules on it (A4). What the
+old single-sided shape got wrong was pretending a fiat buy had no out-leg.
+
+> **Status:** implemented only for VARDE NOK-quoted spot **buy** (§3.7). Sell,
+> stablecoin-quoted, and the `trade_ledger`/SovereignForge mappers are spec only.
 
 `book=accrual` spot buys (DCA/conviction, Trading ADR-006) map identically —
 the adapter does not special-case books for *type*; `book` is carried into
 `source_id`/provenance so downstream can separate lab vs accrual lots cleanly.
 
 #### Worked example: HP-SF-001 — OFG XRP/USDC buy (NO, live, FX populated)
+
+> **⚠ Legacy notation (flagged 2026-09-29, ADR-004).** The Event rows below were
+> written in the pre-reconciliation single-sided shape (`ACQUISITION`, `asset`,
+> `quantity`, `nok_value`), and their remark that the USDC disposal leg is
+> "out-of-scope" is **superseded**: under §1/§3.1 this fill is one bilateral
+> `TRADE` (`asset_out=USDC`, `quantity_out=50.0`, `asset_in=XRP`,
+> `quantity_in=100.0`) + a standalone `FEE`, and the Taxes core — not the adapter —
+> rules on the USDC leg. The **input row, provenance rulings and FX rulings** below
+> remain the pinned content. The rows are left verbatim because this example is a
+> `PROPOSED` artifact owned by the SovereignForge recognition proposal
+> (`proposals/sf_producer_recognition_PROPOSED.md`); re-pin it there when that is
+> ratified. No SovereignForge mapper exists in code yet.
 
 > **Status:** PROPOSED 2026-06-14 alongside the SovereignForge per-producer
 > handling rulings in §3.6 + the Taxes ADR-0001 identifier-namespace addendum.
@@ -265,7 +316,11 @@ disposal. The adapter emits a linked pair:
 These rely on Taxes' transfer-linking (ADR-0007/0013). The adapter's job is to
 emit them as a *linkable pair with matching asset/quantity/timestamp*, never as
 disposal+acquisition. A subsequent accrual *buy* (a real market spot buy) is a
-separate ACQUISITION per §3.1.
+separate `TRADE` per §3.1.
+
+> **Status:** spec only — no TRANSFER pair is emitted by any implemented mapper.
+> The Capital Router that produces these moves is decided but unbuilt (hub
+> `CAPITAL_ROUTER.md`, ADR-003; 25% Norway holdback into a `tax-reserve` book).
 
 ### 3.4 Prediction-market exports (PM algo, standalone)
 
@@ -330,16 +385,36 @@ Taxes ADR-0001 addendum 2026-06-14 (PROPOSED).
 > Reserved `event_id` prefix **`varde:`**. Transport: append-only
 > `db-backup/varde-fills.csv`, schema `varde/1` (see SOURCES.md §5).
 >
-> **Shape note (read this first).** VARDE conforms to the adapter's *own* export
-> contract (not `trade_ledger` v3) — same per-producer pattern as PM algo (§3.4) and
-> arb-bot. This section is written natively in the **real bilateral `CanonicalEvent`
-> shape** verified against Taxes `src/tax_core/models/event.py`:
-> `event_type ∈ {TRADE, TRANSFER_IN/OUT, INCOME, FEE, GIFT_IN/OUT, REQUIRES_REVIEW}`
-> with `asset_out/in` + `quantity_out/in`, validated at construction by
-> `_validate_shape`. It does **not** use the single-sided `ACQUISITION/DISPOSAL/SWAP`
-> wording of §3.1/§7 — those stay record-only pending the doc-wide reconciliation
-> (ECOSYSTEM FINDING 2026-06-18). For VARDE, read `ACQUISITION/DISPOSAL/SWAP` as
-> resolving into the `TRADE` rows below.
+> **Shape note.** VARDE conforms to the adapter's *own* export contract (not
+> `trade_ledger` v3) — same per-producer pattern as PM algo (§3.4) and arb-bot. This
+> section was the first written natively in the **real bilateral `CanonicalEvent`
+> shape** verified against Taxes `src/tax_core/models/event.py`; §1, §3.1 and §7 were
+> reconciled to it on 2026-09-29 (ADR-004), closing the ECOSYSTEM FINDING of
+> 2026-06-18.
+>
+> **Implementation status — verified 2026-09-29.** The **NOK-quoted spot BUY**
+> (HP-VARDE-001 below) is implemented and golden-pinned
+> (`src/tax_adapter/producers/varde.py`; `tests/test_varde_hp1.py`; the emitted CSV is
+> byte-identical to `tests/fixtures/varde/hp1_expected_events.csv` and re-runs are
+> byte-identical). **Not implemented** — the mapper raises `NotImplementedError`
+> (fail-closed, A3; it never guesses): spot **sell**, **stablecoin-quoted** fills,
+> **XRPL transfers**, non-spot `product_type`.
+>
+> **Known v1 gaps — code vs this spec (labelled, not silent):**
+> 1. **`source_row_index` follows input order**, not the stable sort
+>    `(exchange_ts, trade_id, leg)` specified below and in §4. Verified: a
+>    later-timestamp row listed first receives index 0. Canonical sort is slice-2 work;
+>    until then inputs must already be in canonical order or FIFO tie-breaks are wrong.
+> 2. **A `FEE` event is emitted even when `fee == 0`**; this spec says only when
+>    `fee > 0`.
+> 3. **A blank `fee` (spec: "missing = blank, never 0") crashes** with a bare
+>    `decimal.InvalidOperation` instead of routing to `REQUIRES_REVIEW` with a counted
+>    reason (§5). Fail-closed by accident, not by design.
+> 4. **No counted-skip ledger** (§5 invariant `sum(skip_reasons) == n_unmapped`) —
+>    unmapped shapes abort the run rather than being counted.
+> 5. **No `raw_row`/rich provenance dict** — only the four mandatory provenance keys
+>    and the write-only `notes` string are emitted; `events.csv` has no column for the
+>    richer dict shown in the worked example.
 
 **Input — one `varde-fills.csv` row (`varde/1`, consumed columns):**
 `source_row_id, exchange_ts, venue, symbol, product_type, base, quote, side, qty,
@@ -422,12 +497,12 @@ richer dict is the adapter's additional provenance. Quantities are positive (A7)
 `event.py` enforces the `TRADE` (both legs) and standalone-`FEE` (no legs) shapes at
 construction.
 
-> **Deliberately differs from §7 HP-1.** §7 emits a single-sided `ACQUISITION` for the
-> fiat buy; the real `CanonicalEvent` has **no** `ACQUISITION` type, and
-> `_validate_shape` rejects a one-sided "in" that isn't `TRANSFER_IN/GIFT_IN/INCOME`.
-> The faithful representation of a purchase is a `TRADE` with home-fiat on the out-leg.
-> HP-VARDE-001 is the first worked example written natively in the bilateral target
-> shape; §7 aligns when the doc-wide reconciliation lands.
+> **Why a purchase is a `TRADE`, not a one-sided acquisition.** The real
+> `CanonicalEvent` has **no** `ACQUISITION` type, and `_validate_shape` rejects a
+> one-sided "in" that isn't `TRANSFER_IN`/`GIFT_IN`/`INCOME`. The faithful
+> representation of a purchase is a `TRADE` with home-fiat on the out-leg. §7 (the
+> `trade_ledger` HP-1) was aligned to this shape on 2026-09-29 and is now the same
+> `TRADE` + `FEE` pair — spec only, since the `trade_ledger` mapper is not built.
 
 ---
 
@@ -441,7 +516,18 @@ construction.
 - The mapping has no clock, no randomness, no network call. Same input → same
   events, always (mirrors Taxes deterministic-core principle).
 
+> **v1 status (verified 2026-09-29):** no-clock/no-randomness/no-network and
+> byte-identical re-runs **hold and are tested**. The stable sort for
+> `source_row_index` is **not yet implemented** — v1 preserves input order (see the
+> §3.7 known-gaps list).
+
 ## 5. Validation (what the adapter refuses)
+
+> **v1 status (verified 2026-09-29):** the fail-closed half is implemented — an
+> unmapped shape raises `NotImplementedError` and a shape-invalid row raises
+> `EventShapeError` (`Event.validate()`); nothing is emitted past a failure. The
+> **counted-skip ledger and `REQUIRES_REVIEW` routing described below are not yet
+> built**; a blank `fee` currently surfaces as an uncaught `decimal.InvalidOperation`.
 
 Per A2/A3, the adapter emits but also gate-checks:
 - missing `fx_usdnok_at_fill` on a row needing NOK value → `nok_value=None`
@@ -463,19 +549,32 @@ ADR superseding this file.
 
 ## 7. Happy Path 1 — MM Strategy spot buy (end-to-end worked example)
 
-The first path to be wired end-to-end (ADR-003): **MM Strategy Bot / Trading
+> **Status (verified 2026-09-29): SPEC ONLY — the `trade_ledger` mapper is not
+> built.** ADR-003 named MM/Trading as the first producer to wire; in practice the
+> first *executable* slice was **VARDE's** identical shape (§3.7, HP-VARDE-001),
+> because VARDE had real exported fills and Trading is still pre-edge (ADR-004).
+> This section remains the contract the Trading HP-1 mapper will be pinned to
+> (fixture: `Trading/fixtures/trade_ledger/hp1_spot_buy.csv`), and its output is now
+> the same bilateral `TRADE` + `FEE` pair the VARDE mapper already emits.
+
+The second path (ADR-003 originally the first): **MM Strategy Bot / Trading
 lab → adapter → Taxes intake**, deliberately the simplest scenario — one vanilla
-**fiat-quoted spot buy**, one venue, `book=lab`, no derivative, no swap, no
-transfer. It is the only fully one-sided spot case (§3.1 row 1): a single
-`ACQUISITION` plus a `FEE`, no SWAP disposal leg, and — because the quote is NOK
-— no FX tier needed for `nok_value`. This worked example is the contract the
-first golden fixture is pinned against.
+**fiat-quoted spot buy**, one venue, `book=lab`, no derivative, no stablecoin
+quote, no transfer. Because the quote is NOK, `nok_value` needs no FX tier. The
+output is one `TRADE` (NOK out, BTC in) plus a standalone `FEE`.
 
 > Later happy paths extend this spine, not replace it: **HP-2** adds a
-> stablecoin-quoted buy (a two-leg SWAP, §3.1); **HP-3** adds a derivative
-> realized-PnL fill (§3.2, characterization per ADR-002). Spot-only first.
+> stablecoin-quoted buy (same `TRADE` shape; `nok_value` needs FX, §3.1); **HP-3**
+> adds a derivative realized-PnL fill (§3.2, characterization per ADR-002).
+> Spot-only first.
 
 ### 7.1 Input — one `trade_ledger` row (the only consumed fields shown)
+
+> **Verified 2026-09-29** against `Trading/fixtures/trade_ledger/hp1_spot_buy.csv`:
+> every value below matches that pinned fixture row. Notation differs only in that
+> the fixture is flat CSV (`instrument_symbol`, `instrument_product_type`, …,
+> `fx_rate`, `fx_source`, `fx_as_of_ts` rather than nested `instrument.*` /
+> `fx_usdnok_at_fill{…}`). The Trading mapper will read the flat columns.
 
 ```
 venue:               kraken
@@ -509,25 +608,29 @@ schema_version:      trade_ledger/3
 
 ### 7.2 Output — exactly two canonical `Event` rows
 
-Per §3.1 (fiat-quoted buy → `ACQUISITION` of base; plus a `FEE` leg for the
-non-zero fee). `nok_value` for the acquisition is the NOK notional `qty × price`
-(quote already NOK, no FX applied); the fee is already NOK. The adapter performs
-no tax math — only the quote-currency notional and a verbatim fee pass-through.
+Per §3.1 (spot buy → one bilateral `TRADE`, plus a standalone `FEE` for the
+non-zero fee). Because the quote is NOK, `nok_value_out/in` is the NOK notional
+`qty × price` directly (no FX applied); the fee is already NOK. The adapter performs
+no tax math — only the quote-currency notional and a verbatim fee pass-through. The
+four mandatory provenance keys (`parser`, `parser_version`, `source_type`,
+`source_ref`) are populated on both rows; their `trade_ledger` values are fixed when
+that mapper is built (the VARDE analogue is `varde_adapter` / `varde/1->event/1` /
+`varde-fills` / `varde-fills.csv#{trade_id}`).
 
-**Event 0 — ACQUISITION**
+**Event 0 — TRADE**
 ```
 event_id:          ledger:run_2026_03_02_001:trd_a12b:0
 timestamp:         2026-03-02T10:15:30Z            # from exchange_ts (UTC); reported Europe/Oslo downstream
-event_type:        ACQUISITION
-asset:             BTC
-quantity:          0.05000000                       # Decimal, positive
-nok_value:         30000.00                          # 0.05 × 600000, quote=NOK
+event_type:        TRADE
+asset_out:         NOK
+quantity_out:      30000.00000000                   # qty × price = 0.05 × 600000
+asset_in:          BTC
+quantity_in:       0.05000000                       # Decimal, positive
+nok_value_out:     30000.00                          # advisory; quote=NOK → notional direct
+nok_value_in:      30000.00
 source_id:         trade_ledger:lab
 source_row_index:  0                                 # stable sort key (exchange_ts, trade_id, leg)
-provenance:        {adapter_schema_version, decision_id: dec_77c0, order_id: ord_8f31,
-                    trade_id: trd_a12b, strategy_id: mm_v1, experiment_hash, book: lab,
-                    mode: live, run_id: run_2026_03_02_001, git_commit: a1b2c3d,
-                    fx_usdnok_at_fill: {rate, source, as_of_ts}, raw_row: {…}}
+notes:             write-only overflow, e.g. decision_id=dec_77c0;strategy_id=mm_v1;book=lab;mode=live
 ```
 
 **Event 1 — FEE**
@@ -535,17 +638,20 @@ provenance:        {adapter_schema_version, decision_id: dec_77c0, order_id: ord
 event_id:          ledger:run_2026_03_02_001:trd_a12b:1
 timestamp:         2026-03-02T10:15:30Z
 event_type:        FEE
-asset:             NOK
-quantity:          150.00                            # Decimal, positive
-nok_value:         150.00                            # fee already in NOK
+fee_asset:         NOK
+fee_quantity:      150.00                            # Decimal, positive
+nok_value_out:     150.00                            # advisory; fee already in NOK
 source_id:         trade_ledger:lab
 source_row_index:  1
-provenance:        {… same chain as Event 0, leg: 1 …}
 ```
 
-No NOK disposal event is emitted: NOK is home fiat, not a taxable asset disposal
-in Norway — which is exactly why a fiat-quoted buy is one-sided (contrast the
-stablecoin-quoted SWAP of §3.1 / HP-2).
+There is no separate "NOK disposal" row: the NOK out-leg is carried **inside** the
+`TRADE`. NOK is home fiat, so the Taxes core will treat that leg as a non-taxable
+home-fiat movement — but the adapter does not pre-decide that; it emits the full
+two-leg event and lets the core rule (A4). The richer provenance chain
+(`decision_id → order_id → trade_id`, `run_id`, `git_commit`, `fx_usdnok_at_fill`,
+raw row) has no `events.csv` column and is currently only partially carried in
+`notes` — see known gap 5 in §3.7.
 
 ### 7.3 Determinism & idempotency (per §4)
 
@@ -559,11 +665,11 @@ stablecoin-quoted SWAP of §3.1 / HP-2).
 
 | fixture | owner | content |
 |---|---|---|
-| input ledger row | Trading (schema-faithful until live) | the §7.1 row, byte-pinned |
-| expected Events | Adapter | the two §7.2 rows, byte-pinned |
-| intake check | Taxes | `Taxes/` ingests the two rows without error (20-column `events.csv`) |
+| input ledger row | Trading | exists: `Trading/fixtures/trade_ledger/hp1_spot_buy.csv` (matches §7.1) |
+| expected Events | Adapter | **not yet pinned** — the two §7.2 rows become `tests/fixtures/trade_ledger/…` when the mapper is built (the VARDE analogue is pinned: `tests/fixtures/varde/hp1_expected_events.csv`) |
+| intake check | Taxes | the real `CanonicalEvent` accepts the shape — **proven for the VARDE pair** by `tests/test_events_conformance.py` (runs when Taxes is importable at its local path, else skips) |
 
-Gate to run it for real: the **`trade_ledger` → adapter transport** decision
-(§3 SOURCES / PROGRESS open item 2) and the first live (or schema-faithful) lab
-row. Build against real exported rows or schema-faithful fixtures — never an
-imagined shape (GOTCHAS 11); re-verify when the first live ledger lands.
+Remaining gates for the `trade_ledger` path: the **transport** decision (hub
+`GAPS.md` OPEN-3) and building the mapper. Build against real exported rows or
+schema-faithful fixtures — never an imagined shape (GOTCHAS 11); re-verify when the
+first live ledger lands.

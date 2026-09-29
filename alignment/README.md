@@ -139,7 +139,16 @@ changes back to the Tax Adapter alignment folder.
 
 ---
 
-## Active task prompts — HP-1 cycle (opened 2026-06-14)
+## Active task prompts — HP-1 cycle (opened 2026-06-14) — **RETIRED 2026-09-29**
+
+> **Both blocks below are retired per this section's own rule** (their `ECOSYSTEM.md
+> §8` items flipped): Trading delivered the transport *format* (ADR-007) and the
+> `hp1_spot_buy.csv` fixture; Taxes ratified the prefixes (ADR-0001 addendum
+> 2026-07-13) and the adapter's emitted rows are proven against the real
+> `CanonicalEvent` (`tests/test_events_conformance.py`). Kept as history. Do **not**
+> paste them into a new session; note the Taxes block's "ACQUISITION + FEE" wording
+> is superseded by `TRADE` + `FEE` (ADR-004). Live transport mechanics remain open —
+> see `HANDOFF.md`.
 
 **Time-bound, unlike the evergreen blocks above.** These drive the first
 end-to-end path (ADR-003: MM spot-only). Paste the targeted block *after* that

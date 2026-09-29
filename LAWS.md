@@ -81,7 +81,10 @@ independently-evolving responsibilities and is the exact anti-pattern the
 ## A10 — event_id namespace is verified collision-free
 Any `event_id` format the adapter emits is checked against Taxes' reserved
 prefixes (`inflow_group:`, and the canonical `xrpl:`/`csv:` parser formats,
-ADR-0001 addendum) before use. The adapter's `ledger:`/`pm-algo:` prefixes are
-reserved here and must not be reused by upstream parsers.
+ADR-0001 addendum) before use. **Status 2026-09-29:** Taxes' ADR-0001 addendum of
+2026-07-13 reserves `ledger:`, `arb:` and `varde:` as `event_id` prefixes, which
+upstream parsers must not reuse; `pm-algo:` is ratified only as a `provenance.algo`
+label, so a PM-algo mapper's `event_id` prefix is **not yet reserved** and must be
+before that mapper emits. The registry of record is Taxes', not this file.
 **Why:** Taxes ADR-0001 addendum — a colliding event_id silently merges or
 shadows unrelated events.

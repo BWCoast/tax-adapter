@@ -1,6 +1,7 @@
 # ECOSYSTEM — canonical alignment for all tax/trading sessions
 
-> **Status:** binding · **Owner:** Tax Adapter session (this repo) · **Updated:** 2026-06-14 (§0 scope note added 2026-06-18)
+> **Status:** binding · **Owner:** Tax Adapter session (this repo) · **Updated:** 2026-06-14 (§0 scope note 2026-06-18; topology + §8 OPEN items refreshed 2026-09-29)
+> **Last verified:** 2026-09-29 · **Verify-by:** 2026-12-29
 >
 > This is the shared mental model for every session in the ecosystem. Read it
 > before doing tax/trading/reporting work in *any* repo. It does not replace a
@@ -82,8 +83,8 @@ it. A stale alignment doc is a bug, not an authority.
 | **MM Strategy Bot / Trading lab** | `Documents/Trading` | Producer. Owns `trade_ledger`, intent, order contracts, the two-book model. |
 | **SovereignForge** | `Documents/SovereignForgeV1` (Norwegian operator's fork: `BWCoast/SovereignForgeV1`) | Producer (promotion 2026-06-14, **PROPOSED** ratification). Emits canonical `trade_ledger` v3 rows via a thin translator over its existing DAC8 chain. Strategy: OFG-DCA spot-only on Bybit-EU USDC. Reserved `event_id` prefix `sf:ofg:`. Branch: `claude/norway-producer-seam`. Detail: `SOURCES.md` §4, `proposals/sf_producer_recognition_PROPOSED.md`. |
 | **Prediction-Market algo (Kalshi)** | `Documents/PM algo` | Producer. Standalone bot; conforms to the adapter's export contract. |
-| **Arbitrage Bot** | *repo path TBD* | **First-class planned producer** — not yet built / not yet feeding the pipeline. First-class in the topology now (not a generic future system). |
-| **VARDE** | *repo path TBD* | **First-class planned producer** (another bot) — not yet built / not yet feeding the pipeline. First-class now, specifics OPEN. |
+| **Arbitrage Bot** | `Documents/arb-bot` | Producer, **registered** (hub ADR-005): own `tax_export.csv` contract, prefix `arb:` reserved by Taxes. Paper-only upstream; **no adapter mapper built yet**. |
+| **VARDE** | `Documents/Offshore trading` (repo `VARDE`) | Producer, facts-only (hub ADR-004). Export `varde-fills.csv` (`varde/1`). **The only producer with an implemented adapter mapper** — NOK-quoted spot buy (`SCHEMAS.md §3.7`, ADR-004). Sell / stablecoin-quoted / XRPL transfers not built. |
 | **Capital Router** (stage) | shared `capital-router-lib`, per-bot | **Decided 2026-06-18 (Norway-only):** a shared `capital-router-lib` applying a flat **25% holdback on realized profit (22% tax + 3% fee buffer)**, implemented per-bot and emitting a linked `TRANSFER_OUT`/`TRANSFER_IN` into a `tax-reserve` book; losses hold back nothing. Owning doc: `Trading Alignment/CAPITAL_ROUTER.md` (ADR-003). |
 | **Dashboards / pnl-service** | *future* | Consumers. Downstream of realized PnL and tax Events. |
 
@@ -198,33 +199,42 @@ OPEN: <short title>
 > **Authoritative tracker (2026-06-18):** cross-cutting OPEN items now live in
 > `Trading Alignment/GAPS.md` (OPEN-1…OPEN-13). The items below are the adapter's
 > local mirror (hub OPEN-1…OPEN-14) — where they differ, GAPS.md wins. Status
-> deltas found in the 2026-06-18 cross-repo read: the HP-1 fixture row now exists upstream
-> (`Trading/fixtures/trade_ledger/hp1_spot_buy.csv`, matches SCHEMAS §7); transport
-> format is a deterministic CSV exporter (Trading ADR-007), mechanism still open
-> (GAPS OPEN-3); the `event_id` registry is formalized and Taxes-owned (Trading
-> Alignment ADR-006 + Taxes ADR-0001-addendum), `ledger:`/`pm-algo:` still pending
-> ratification.
+> re-verified 2026-09-29 against the hub, Taxes and Trading: the HP-1 fixture row
+> exists upstream (`Trading/fixtures/trade_ledger/hp1_spot_buy.csv`, identical to
+> SCHEMAS §7.1); Trading **ADR-007 settles the transport *format*** (append-only,
+> deterministic, decimal-string CSV drop) while live mechanics (file location,
+> rotation, pull cadence) are deferred until live rows exist — the hub still lists
+> OPEN-2/3 as `open` (hub lag); the `event_id` registry is Taxes-owned and the
+> addendum of 2026-07-13 **closed OPEN-1** (see the SETTLED item below).
 
 ```
-OPEN: event_id prefixes for adapter-produced events
-  owner:           Taxes (ratify) + Tax Adapter (propose)
-  blocking_for:    deterministic event_id scheme; adapter implementation
-  decision_needed: reserve the `ledger:` and `pm-algo:` event_id prefixes
-  target_doc:      Taxes ADR-0001 addendum
+SETTLED (2026-07-13): event_id prefixes for adapter-produced events
+  decision:        Taxes ADR-0001 addendum 2026-07-13 (Accepted) reserves `ledger:`,
+                   `arb:`, `varde:` as event_id prefixes (hub OPEN-1 closed).
+  caveat:          `pm-algo:` is ratified ONLY as a `provenance.algo` label, not an
+                   event_id prefix — a PM-algo mapper's event_id prefix is unreserved.
+  follow_ups:      (a) OPEN — PM-algo event_id prefix: owner Taxes + Tax Adapter,
+                   blocks the PM mapper. (b) The adapter now EMITS `varde:` event_ids
+                   (since d89ccb1); Taxes' addendum still says "not yet emitted" —
+                   Taxes to note. (c) hub CONTRACTS.md §3 still shows `ledger:` /
+                   `pm-algo:` as "pending" — hub to refresh.
+  target_doc:      Taxes docs/adr/0001-canonical-event-model.md (addendum)
 
-OPEN: trade_ledger → adapter transport
-  owner:           Trading (decide with Tax Adapter)
-  blocking_for:    adapter reading live canonical rows; Happy Path 1 (HP-1)
-  decision_needed: how canonical rows are handed over (file drop vs shared
-                   read-only export). Schema is settled; only transport is open.
-  target_doc:      Trading ADR (transport) + adapter SOURCES.md
+SETTLED (format) / OPEN (live mechanics): trade_ledger → adapter transport
+  decision:        Trading ADR-007 — append-only, deterministic, decimal-string CSV
+                   drop (satisfies the read-only / deterministic / append-only rules).
+  remaining:       live mechanics — where the file lands, rotation, pull cadence —
+                   deferred by ADR-007 until live rows exist. Hub OPEN-3 not yet flipped.
+  owner:           Trading + Tax Adapter
+  blocking_for:    reading LIVE rows (not the HP-1 fixture build)
+  target_doc:      Trading decisions/ADR-007 + adapter SOURCES.md
 
-OPEN: HP-1 schema-faithful trade_ledger fixture
-  owner:           Trading (produce) + Tax Adapter (consume)
-  blocking_for:    the adapter's first golden fixture (SCHEMAS §7 / ADR-003)
-  decision_needed: one contract-faithful fiat-quoted spot-buy row, emitted in
-                   the chosen HP-1 transport format
-  target_doc:      Trading repo fixture (e.g. fixtures/trade_ledger/hp1_spot_buy.csv)
+SETTLED: HP-1 schema-faithful trade_ledger fixture
+  decision:        `Trading/fixtures/trade_ledger/hp1_spot_buy.csv` exists; verified
+                   2026-09-29 identical to SCHEMAS §7.1. Hub OPEN-2 not yet flipped.
+  remaining:       the adapter's `trade_ledger` mapper + its pinned expected-events
+                   fixture are NOT built (only the VARDE analogue is — ADR-004).
+  target_doc:      adapter SCHEMAS §7 (spec) → tests/fixtures/trade_ledger/ (future)
 
 OPEN: prediction-market export contract
   owner:           PM algo (conform) + Tax Adapter (define shape)
@@ -246,9 +256,12 @@ SETTLED + IMPLEMENTED: VARDE export transport (2026-05-12)
                    adapter's view; deterministic. Physical order = append-by-source_row_id;
                    adapter applies the canonical (exchange_ts, trade_id) sort itself.
   implemented_in:  VARDE scripts/export_fills.py (stdlib-only, 23-col contract).
-  remaining:       adapter-side ingestion of varde-fills.csv (Tax Adapter to confirm
-                   readable + record in adapter SOURCES.md).
-  target_doc:      alignment/role-varde.md + adapter SOURCES.md
+  adapter_side:    DONE for the NOK-quoted spot buy (2026-06-20, d89ccb1): the adapter
+                   reads varde-fills.csv read-only and maps it (SCHEMAS §3.7, ADR-004).
+                   NOT done: sell, stablecoin-quoted, XRPL transfers; the canonical
+                   (exchange_ts, trade_id, leg) sort is not yet applied (input order
+                   is preserved — SCHEMAS §3.7 known gap 1).
+  target_doc:      alignment/role-varde.md + adapter SOURCES.md §5
 
 IMPLEMENTED: VARDE Trade model schema bumps (2026-05-12)
   owner:           VARDE (done)
@@ -267,20 +280,24 @@ OPEN: per-producer alignment-lint ratchet (hub OPEN-14)
                    export, capital-router-lib pin, golden fixture, event_id prefix)
   target_doc:      Trading Alignment/tools/producers.json + ONBOARDING-PRODUCER.md
 
-FINDING: adapter SCHEMAS.md misrepresents the events.csv output contract
-  owner:           Tax Adapter (record) → resolved by a dedicated build/P&L adapter (operator)
-  blocking_for:    correctness of emitted Events (Taxes CanonicalEvent rejects the current shape)
-  decision_needed: SCHEMAS.md §1/§7 describe single-sided ACQUISITION/DISPOSAL/SWAP +
+RESOLVED (2026-09-29, ADR-004): adapter SCHEMAS.md misrepresented the events.csv contract
+  was:             SCHEMAS §1/§7 described single-sided ACQUISITION/DISPOSAL/SWAP +
                    asset/quantity/nok_value. The real Taxes events.csv (verified in
                    Taxes/src/tax_core/models/event.py) is BILATERAL: event_type ∈
                    {TRADE, TRANSFER_IN/OUT, INCOME, FEE, GIFT_IN/OUT, REQUIRES_REVIEW};
-                   columns asset_out/in, quantity_out/in, fee_asset/quantity,
-                   nok_value_out/in + 4 provenance keys. ACQUISITION/DISPOSAL/SWAP are
-                   adapter-internal semantics that must resolve into TRADE/TRANSFER_*.
-  resolution:      per operator (2026-06-18): do NOT align the adapter to the Firi parser;
-                   a dedicated build/P&L adapter will reconcile the output shape.
-                   SCHEMAS.md left UNCHANGED pending that work (record-only).
-  target_doc:      adapter SCHEMAS.md §1/§7 (future) + the planned build/P&L adapter
+                   asset_out/in, quantity_out/in, fee_asset/quantity, nok_value_out/in
+                   + 4 provenance keys.
+  resolution:      the adapter was built directly to the bilateral contract (d89ccb1);
+                   a spot buy/sell is one TRADE + a standalone FEE. It was NOT aligned to
+                   the Firi parser (operator direction 2026-06-18 honoured). SCHEMAS
+                   §1/§3.1/§7 reconciled the same day this was resolved; the VARDE pair
+                   is proven against the real CanonicalEvent by
+                   tests/test_events_conformance.py (28 passed, 0 skipped).
+  still_legacy:    (a) hub Trading Alignment/CONTRACTS.md worked examples A/B still write
+                   ACQUISITION/SWAP as event_type (owner: Trading Alignment);
+                   (b) SCHEMAS HP-SF-001 rows, PROPOSED, carry a legacy-notation banner
+                   (owner: SovereignForge recognition proposal).
+  target_doc:      adapter SCHEMAS.md §1/§3.1/§7 + decisions/ADR-004
 ```
 
 ## 9. SovereignForge takeaways (owner-tagged)

@@ -1,6 +1,12 @@
 # Tax Adapter Genesis — Design Note (v1: VARDE HP-1)
 
-**Status:** Design — awaiting approval before writing-plans / code.
+**Status:** **Implemented** — landed in `d89ccb1` (2026-06-20); verified 2026-09-29
+(`uv run pytest`: 28 passed, 0 skipped). Decisions formalised in
+`decisions/ADR-004`. *(Originally: "Design — awaiting approval before writing-plans /
+code.")* Deviations from this note as built: the CLI needs `PYTHONPATH=src`; the
+`source_row_index` sort is input order, not `(exchange_ts, trade_id, leg)`; the "raise
+`NotImplementedError` (or route `REQUIRES_REVIEW`)" non-goal resolved to
+`NotImplementedError` only — see `SCHEMAS.md §3.7` known gaps.
 **Scope:** The Tax Adapter's first executable code. One producer (VARDE), one golden path (HP-1), one output (`events.csv`).
 **Repo:** `C:\Users\mrkro\Documents\Tax adapter` (currently docs-only).
 
